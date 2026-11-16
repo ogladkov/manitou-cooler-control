@@ -548,10 +548,10 @@ index 52cdce5..1ce6861 100644
       */
 diff --git a/coolercontrol-ui/src/utils/__tests__/lcdSensors.spec.ts b/coolercontrol-ui/src/utils/__tests__/lcdSensors.spec.ts
 new file mode 100644
-index 0000000..fa0720e
+index 0000000..2e6d4ec
 --- /dev/null
 +++ b/coolercontrol-ui/src/utils/__tests__/lcdSensors.spec.ts
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,47 @@
 +import 'reflect-metadata'
 +import { describe, it, expect } from 'vitest'
 +import { Status, ChannelStatus, TempStatus } from '@/models/Status'
@@ -565,6 +565,19 @@ index 0000000..fa0720e
 +        expect(lcdSensors(status)).toEqual(names.map((name, i) => ({
 +            id: `@percent:${name}`, channel: name, value: i === 0 ? '82.0' : '0.0', unit: '%',
 +        })))
++    })
++    it('offers disk usage including empty and full filesystems, without exposing fan PWM', () => {
++        const names = ['disk_8a5edab28263_used', 'disk_0123456789ab_used', 'disk_abcdef012345_used']
++        const status = new Status(new Date().toISOString(), [], [
++            ...names.map((name, i) => new ChannelStatus(name, undefined, [0, 96.4, 100][i])),
++            new ChannelStatus('fan1', undefined, 75),
++            new ChannelStatus('disk_invalid_used', undefined, 50),
++        ])
++        expect(lcdSensors(status)).toEqual(names.map((name, i) => ({
++            id: `@percent:${name}`, channel: name, value: ['0.0', '96.4', '100.0'][i], unit: '%',
++        })))
++        status.timestamp = new Date(Date.now() - 6000).toISOString()
++        expect(lcdSensors(status).map(source => source.value)).toEqual(['--', '--', '--'])
 +    })
 +    it('preserves temperature IDs and distinguishes RPM, PWM and utilization', () => {
 +        const status = new Status(new Date().toISOString(), [new TempStatus('temp1', 62.5)], [
@@ -605,10 +618,10 @@ index 0000000..473d51c
 +}
 diff --git a/coolercontrol-ui/src/utils/lcdSensors.ts b/coolercontrol-ui/src/utils/lcdSensors.ts
 new file mode 100644
-index 0000000..14527ba
+index 0000000..5236276
 --- /dev/null
 +++ b/coolercontrol-ui/src/utils/lcdSensors.ts
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,26 @@
 +import type { Status } from '@/models/Status'
 +
 +// Typed IDs are local to LCD TempSource; they never enter the cooling profile path.
@@ -627,7 +640,8 @@ index 0000000..14527ba
 +        }
 +        // A fan's PWM percentage is not CPU/GPU load or memory occupancy.
 +        const remainingQuota = /^openai_weekly_(?:[a-f0-9]{12}_)?remaining$/.test(channel.name)
-+        if (channel.duty != null && (channel.name.toLowerCase().includes('load') || remainingQuota)) {
++        const diskUsage = /^disk_[a-f0-9]{12}_used$/.test(channel.name)
++        if (channel.duty != null && (channel.name.toLowerCase().includes('load') || remainingQuota || diskUsage)) {
 +            sensors.push({ id: `@percent:${channel.name}`, channel: channel.name,
 +                value: display(channel.duty, 1), unit: '%' })
 +        }
