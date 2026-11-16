@@ -1,0 +1,8 @@
+id = "lianli-lcd"
+type = "device"
+description = "Lian Li TL LCD / RGB, fan RPM and CPU/GPU/RAM/VRAM telemetry"
+version = "0.4.1"
+executable = "/opt/cc-lianli-lcd/venv/bin/cc-lianli-lcd"
+args = "serve --socket /run/cc-lianli-lcd/service.sock"
+address = "/run/cc-lianli-lcd/service.sock"
+privileged = true

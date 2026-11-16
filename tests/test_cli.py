@@ -1,0 +1,30 @@
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+import grpc
+
+from coolercontrol.device_service.v1 import device_service_pb2_grpc, shutdown_pb2
+
+
+def test_daemon_process_socket_permissions_single_instance_and_shutdown(tmp_path):
+    socket = tmp_path / "lcd.sock"
+    command = [sys.executable, "-m", "lianli_lcd.cli", "serve", "--simulate",
+               "--socket", str(socket)]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        with grpc.insecure_channel(f"unix:{socket}") as channel:
+            grpc.channel_ready_future(channel).result(timeout=5)
+            assert os.stat(socket).st_mode & 0o777 == 0o600
+            second = subprocess.run(command, capture_output=True, timeout=5)
+            assert second.returncode != 0
+            assert b"BlockingIOError" in second.stderr
+            device_service_pb2_grpc.DeviceServiceStub(channel).Shutdown(shutdown_pb2.ShutdownRequest())
+        process.wait(timeout=5)
+        assert process.returncode == 0
+        assert not Path(socket).exists()
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.wait(timeout=5)

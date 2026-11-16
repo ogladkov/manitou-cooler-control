@@ -1,0 +1,1942 @@
+diff --git a/coolercontrol-ui/src/components/GraphThresholdEditor.vue b/coolercontrol-ui/src/components/GraphThresholdEditor.vue
+new file mode 100644
+index 0000000..7a3bebe
+--- /dev/null
++++ b/coolercontrol-ui/src/components/GraphThresholdEditor.vue
+@@ -0,0 +1,48 @@
++<script setup lang="ts">
++import Button from 'primevue/button'
++import InputNumber from 'primevue/inputnumber'
++import CCColorPicker from '@/components/CCColorPicker.vue'
++import { useI18n } from 'vue-i18n'
++import { graphThresholdsValid, type GraphThresholdDraft } from '@/utils/graphThresholds'
++
++const rows = defineModel<GraphThresholdDraft[]>({ required: true })
++const props = defineProps<{ unit: string }>()
++const { t } = useI18n()
++function setValue(index: number, value: number | null) {
++    rows.value = rows.value.map((row, i) => i === index ? { ...row, value } : row)
++}
++function setColor(index: number, color: string) {
++    const rgb = color.match(/\d+/g)?.map(Number)
++    if (!rgb || rgb.length !== 3 || rgb.some(c => c > 255)) return
++    rows.value = rows.value.map((row, i) => i === index ? { ...row, color: rgb as [number, number, number] } : row)
++}
++function add() {
++    if (rows.value.length >= 8) return
++    const step = props.unit === 'RPM' ? 500 : 10
++    let value = rows.value.length ? Math.max(...rows.value.map(r => r.value ?? 0)) + step : (props.unit === 'RPM' ? 1500 : 70)
++    while (rows.value.some(row => row.value === value)) value += step
++    rows.value = [...rows.value, { value, color: [255, 160, 40] }]
++}
++</script>
++
++<template>
++    <fieldset class="mb-6 rounded-lg border border-border-one p-3">
++        <legend class="px-1 text-text-color-secondary">{{ t('views.lcd.graphColors') }}</legend>
++        <p class="mb-3 text-sm text-text-color-secondary">{{ t('views.lcd.graphColorsHelp') }}</p>
++        <div v-for="(row, index) in rows" :key="index" class="mb-3 flex items-end gap-2">
++            <div class="min-w-0 flex-1">
++                <label :for="`graph-threshold-${index}`" class="mb-1 block text-sm">{{ t('views.lcd.graphAt') }}</label>
++                <InputNumber :input-id="`graph-threshold-${index}`" :model-value="row.value"
++                    :max-fraction-digits="2" :use-grouping="false" :suffix="` ${unit}`"
++                    class="w-full" input-class="w-full" @update:model-value="setValue(index, $event)" />
++            </div>
++            <CCColorPicker :model-value="`rgb(${row.color.join(', ')})`" :size="2.5"
++                default-color="rgb(255, 255, 255)" @update:model-value="setColor(index, $event)" />
++            <Button type="button" icon="pi pi-trash" :aria-label="t('views.lcd.graphRemove')"
++                @click="rows = rows.filter((_, i) => i !== index)" />
++        </div>
++        <p v-if="!graphThresholdsValid(rows)" role="alert" class="mb-3 text-sm text-red-400">{{ t('views.lcd.graphInvalid') }}</p>
++        <Button type="button" icon="pi pi-plus" :label="t('views.lcd.graphAdd')"
++            :disabled="rows.length >= 8" @click="add" />
++    </fieldset>
++</template>
+diff --git a/coolercontrol-ui/src/components/SensorStylePicker.vue b/coolercontrol-ui/src/components/SensorStylePicker.vue
+new file mode 100644
+index 0000000..891fe82
+--- /dev/null
++++ b/coolercontrol-ui/src/components/SensorStylePicker.vue
+@@ -0,0 +1,42 @@
++<script setup lang="ts">
++defineProps<{ modelValue: string; title: string }>()
++const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
++const styles = [
++    { id: 'classic', label: 'CoolerControl' },
++    { id: 'digital', label: 'Digital' },
++    { id: 'ring', label: 'Ring' },
++    { id: 'dial', label: 'Dial' },
++    { id: 'trend', label: 'Trend' },
++    { id: 'mono_minimal', label: 'Mono Minimal' },
++    { id: 'mono_dial', label: 'Mono Dial' },
++    { id: 'mono_segment', label: 'Mono Segment' },
++    { id: 'mono_graph', label: 'Mono Paper' },
++    { id: 'mono_orbit', label: 'Alien Orbit' },
++    { id: 'mono_relic', label: 'Alien Relic' },
++    { id: 'mono_signal', label: 'Alien Signal' },
++    { id: 'mono_trace', label: 'Mono Trace' },
++    { id: 'mono_reserve', label: 'Mono Reserve' },
++    { id: 'mono_reverse', label: 'Mono Reverse' },
++]
++</script>
++
++<template>
++    <fieldset class="mb-6">
++        <legend class="mb-3 text-text-color-secondary">{{ title }}</legend>
++        <div class="grid grid-cols-2 gap-3" role="group" :aria-label="title">
++            <button
++                v-for="style in styles"
++                :key="style.id"
++                type="button"
++                :aria-pressed="modelValue === style.id"
++                class="rounded-lg border-2 p-2 text-center transition-colors focus-visible:outline focus-visible:outline-2"
++                :class="modelValue === style.id ? 'border-cyan-400 bg-bg-two' : 'border-border-one hover:border-cyan-600'"
++                @click="emit('update:modelValue', style.id)"
++            >
++                <img :src="`/lcd-styles/${style.id}.png`" alt="" width="160" height="160"
++                     class="aspect-square w-full rounded-md object-contain bg-black" />
++                <span class="mt-2 block text-sm">{{ style.label }}</span>
++            </button>
++        </div>
++    </fieldset>
++</template>
+diff --git a/coolercontrol-ui/src/components/__tests__/GraphThresholdEditor.spec.ts b/coolercontrol-ui/src/components/__tests__/GraphThresholdEditor.spec.ts
+new file mode 100644
+index 0000000..70e72e3
+--- /dev/null
++++ b/coolercontrol-ui/src/components/__tests__/GraphThresholdEditor.spec.ts
+@@ -0,0 +1,44 @@
++import 'reflect-metadata'
++import { describe, it, expect, vi } from 'vitest'
++import { mount } from '@vue/test-utils'
++import GraphThresholdEditor from '../GraphThresholdEditor.vue'
++import { graphThresholdsValid } from '@/utils/graphThresholds'
++
++vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
++vi.mock('@/components/CCColorPicker.vue', () => ({ default: { name: 'CCColorPicker', template: '<span />' } }))
++
++describe('graph thresholds', () => {
++    it('adds, edits colors and values, and removes a rule without mutating saved settings', async () => {
++        const saved: any[] = []
++        const wrapper = mount(GraphThresholdEditor, {
++            props: { modelValue: saved, unit: 'RPM' },
++            global: { stubs: {
++                Button: { props: ['label', 'disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')">{{label}}</button>' },
++                InputNumber: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', Number($event.target.value))" />' },
++                CCColorPicker: { emits: ['update:modelValue'], template: '<button data-test="color" @click="$emit(\'update:modelValue\', \'rgb(0, 120, 255)\')">Color</button>' },
++            } },
++        })
++        const lastRows = () => wrapper.emitted('update:modelValue')!.at(-1)![0] as any[]
++        await wrapper.findAll('button').find(b => b.text().includes('graphAdd'))!.trigger('click')
++        expect(saved).toEqual([])
++        expect(lastRows()[0].value).toBe(1500)
++        await wrapper.setProps({ modelValue: lastRows() })
++        await wrapper.find('input').setValue('1800')
++        expect(lastRows()[0].value).toBe(1800)
++        await wrapper.setProps({ modelValue: lastRows() })
++        await wrapper.find('[data-test="color"]').trigger('click')
++        expect(lastRows()[0].color).toEqual([0,120,255])
++        await wrapper.setProps({ modelValue: lastRows() })
++        await wrapper.find('[aria-label="views.lcd.graphRemove"]').trigger('click')
++        expect(lastRows()).toEqual([])
++    })
++    it('accepts empty and unsorted thresholds but rejects ambiguous or invalid entries', () => {
++        expect(graphThresholdsValid([])).toBe(true)
++        expect(graphThresholdsValid([{value:85,color:[255,0,0]}, {value:70,color:[255,160,40]}])).toBe(true)
++        for (const rows of [
++            [{value:null,color:[255,0,0]}], [{value:NaN,color:[255,0,0]}],
++            [{value:70,color:[256,0,0]}], [{value:70,color:[255,0,0]},{value:70,color:[0,255,0]}],
++            Array.from({length:9}, (_, i) => ({value:i,color:[255,255,255]})),
++        ]) expect(graphThresholdsValid(rows as any)).toBe(false)
++    })
++})
+diff --git a/coolercontrol-ui/src/components/__tests__/SensorStylePicker.spec.ts b/coolercontrol-ui/src/components/__tests__/SensorStylePicker.spec.ts
+new file mode 100644
+index 0000000..c8161c8
+--- /dev/null
++++ b/coolercontrol-ui/src/components/__tests__/SensorStylePicker.spec.ts
+@@ -0,0 +1,18 @@
++import { describe, it, expect } from 'vitest'
++import { mount } from '@vue/test-utils'
++import SensorStylePicker from '../SensorStylePicker.vue'
++
++describe('sensor style selection', () => {
++    it('shows fifteen previews and keeps the current per-screen selection', async () => {
++        const wrapper = mount(SensorStylePicker, { props: { modelValue: 'ring', title: 'Sensor style' } })
++        const buttons = wrapper.findAll('button')
++        expect(buttons).toHaveLength(15)
++        expect(buttons[2].attributes('aria-pressed')).toBe('true')
++        expect(wrapper.findAll('img')).toHaveLength(15)
++        await buttons[14].trigger('click')
++        expect(wrapper.emitted('update:modelValue')).toEqual([['mono_reverse']])
++        await wrapper.setProps({ modelValue: 'mono_reverse' })
++        expect(buttons[14].attributes('aria-pressed')).toBe('true')
++        expect(buttons[2].attributes('aria-pressed')).toBe('false')
++    })
++})
+diff --git a/coolercontrol-ui/src/i18n/locales/en.ts b/coolercontrol-ui/src/i18n/locales/en.ts
+index d74ff2a..f49135a 100644
+--- a/coolercontrol-ui/src/i18n/locales/en.ts
++++ b/coolercontrol-ui/src/i18n/locales/en.ts
+@@ -852,6 +852,14 @@ export default {
+             numberOfColorsTooltip: 'Number of Colors to use for the chosen Lighting Mode.',
+         },
+         lcd: {
++      sensorMode: 'Sensor',
++      graphColors: 'Graph color thresholds',
++      graphColorsHelp: 'White by default. The whole graph uses the color of the highest reached threshold (≥). Remove all thresholds to keep it white.',
++      graphAt: 'Value ≥',
++      graphRemove: 'Remove threshold',
++      graphAdd: 'Add threshold',
++      graphInvalid: 'Enter unique numeric values and valid colors (up to 8 thresholds).',
++      sensorStyle: 'Sensor style',
+             saveLcdSettings: 'Save LCD Settings',
+             lcdMode: 'LCD Mode',
+             brightness: 'Brightness',
+@@ -860,8 +868,8 @@ export default {
+             orientationDegrees: 'Orientation in degrees',
+             chooseImage: 'Choose Image',
+             dragAndDrop: 'Drag and drop files to here.',
+-            tempSource: 'Temp Source',
+-            tempSourceTooltip: 'Temperature source to use in LCD display.',
++            tempSource: 'Sensor source',
++            tempSourceTooltip: 'Temperature, fan RPM, CPU/GPU load or RAM/VRAM used.',
+             imagesPath: 'Images Path',
+             imagesPathTooltip:
+                 'Enter the absolute path to the directory containing images.\nThe directory must contain at least one image file, and they\nmay be static images or gifs. The Carousel will cycle\nthrough them with the selected delay. All files are processed\nupon submission to ensure maximum compatibility.',
+diff --git a/coolercontrol-ui/src/i18n/locales/ru.ts b/coolercontrol-ui/src/i18n/locales/ru.ts
+index 1ced93a..faee71d 100644
+--- a/coolercontrol-ui/src/i18n/locales/ru.ts
++++ b/coolercontrol-ui/src/i18n/locales/ru.ts
+@@ -861,6 +861,14 @@ export default {
+                 'Количество цветов для использования в выбранном режиме подсветки.',
+         },
+         lcd: {
++      sensorMode: 'Показатель',
++      graphColors: 'Цветовые пороги графика',
++      graphColorsHelp: 'По умолчанию график белый. Весь график принимает цвет наибольшего достигнутого порога (≥). Удалите все пороги, чтобы оставить белый цвет.',
++      graphAt: 'При значении ≥',
++      graphRemove: 'Удалить порог',
++      graphAdd: 'Добавить порог',
++      graphInvalid: 'Задайте уникальные числовые значения и корректные цвета (не более 8 порогов).',
++      sensorStyle: 'Стиль датчика',
+             saveLcdSettings: 'Сохранить настройки LCD',
+             lcdMode: 'Режим LCD',
+             brightness: 'Яркость',
+@@ -869,8 +877,8 @@ export default {
+             orientationDegrees: 'Ориентация в градусах',
+             chooseImage: 'Выбрать изображение',
+             dragAndDrop: 'Перетащите файлы сюда.',
+-            tempSource: 'Источник температуры',
+-            tempSourceTooltip: 'Источник температуры для использования на LCD-дисплее.',
++            tempSource: 'Источник показателя',
++            tempSourceTooltip: 'Температура, обороты, загрузка CPU/GPU или заполнение RAM/VRAM.',
+             imagesPath: 'Путь к изображениям',
+             imagesPathTooltip:
+                 'Введите абсолютный путь к каталогу, содержащему изображения.\nКаталог должен содержать хотя бы один файл изображения, и они\nмогут быть статическими изображениями или gif-файлами. Карусель будет циклически\nпереключать их с выбранной задержкой. Все файлы обрабатываются\nпри отправке для обеспечения максимальной совместимости.',
+diff --git a/coolercontrol-ui/src/models/DaemonSettings.ts b/coolercontrol-ui/src/models/DaemonSettings.ts
+index 52cdce5..fa3914b 100644
+--- a/coolercontrol-ui/src/models/DaemonSettings.ts
++++ b/coolercontrol-ui/src/models/DaemonSettings.ts
+@@ -92,6 +92,9 @@ export class LcdCarouselSettings {
+ }
+ 
+ export class LcdSettings {
++    sensor_style?: string
++    graph_thresholds?: Array<{ value: number; color: [number, number, number] }>
++
+     /**
+      * The Lcd mode name
+      */
+diff --git a/coolercontrol-ui/src/utils/__tests__/lcdSensors.spec.ts b/coolercontrol-ui/src/utils/__tests__/lcdSensors.spec.ts
+new file mode 100644
+index 0000000..fa0720e
+--- /dev/null
++++ b/coolercontrol-ui/src/utils/__tests__/lcdSensors.spec.ts
+@@ -0,0 +1,34 @@
++import 'reflect-metadata'
++import { describe, it, expect } from 'vitest'
++import { Status, ChannelStatus, TempStatus } from '@/models/Status'
++import { lcdSensors } from '../lcdSensors'
++
++describe('LCD metric sources', () => {
++    it('offers remaining weekly quota as a percent including exhausted buckets', () => {
++        const names = ['openai_weekly_remaining', 'openai_weekly_0123456789ab_remaining']
++        const status = new Status(new Date().toISOString(), [], names.map((name, i) =>
++            new ChannelStatus(name, undefined, i === 0 ? 82 : 0)))
++        expect(lcdSensors(status)).toEqual(names.map((name, i) => ({
++            id: `@percent:${name}`, channel: name, value: i === 0 ? '82.0' : '0.0', unit: '%',
++        })))
++    })
++    it('preserves temperature IDs and distinguishes RPM, PWM and utilization', () => {
++        const status = new Status(new Date().toISOString(), [new TempStatus('temp1', 62.5)], [
++            new ChannelStatus('fan1', 0, 55), new ChannelStatus('CPU Load', undefined, 18),
++            new ChannelStatus('ram_load', undefined, 60), new ChannelStatus('vram_x_load', undefined, 40),
++        ])
++        expect(lcdSensors(status)).toEqual([
++            { id: 'temp1', channel: 'temp1', value: '62.5', unit: '°C' },
++            { id: '@rpm:fan1', channel: 'fan1', value: '0', unit: 'RPM' },
++            { id: '@percent:CPU Load', channel: 'CPU Load', value: '18.0', unit: '%' },
++            { id: '@percent:ram_load', channel: 'ram_load', value: '60.0', unit: '%' },
++            { id: '@percent:vram_x_load', channel: 'vram_x_load', value: '40.0', unit: '%' },
++        ])
++    })
++    it('does not show stale or invalid samples as zero', () => {
++        const stale = new Status(new Date(Date.now() - 6000).toISOString(), [], [new ChannelStatus('fan1', 1200)])
++        expect(lcdSensors(stale)[0].value).toBe('--')
++        const invalid = new Status(new Date().toISOString(), [], [new ChannelStatus('load', undefined, NaN)])
++        expect(lcdSensors(invalid)[0].value).toBe('--')
++    })
++})
+diff --git a/coolercontrol-ui/src/utils/graphThresholds.ts b/coolercontrol-ui/src/utils/graphThresholds.ts
+new file mode 100644
+index 0000000..473d51c
+--- /dev/null
++++ b/coolercontrol-ui/src/utils/graphThresholds.ts
+@@ -0,0 +1,11 @@
++export interface GraphThresholdDraft {
++    value: number | null
++    color: [number, number, number]
++}
++
++export function graphThresholdsValid(rows: GraphThresholdDraft[]): boolean {
++    return rows.length <= 8 && rows.every((row, i) =>
++        row.value != null && Number.isFinite(row.value) &&
++        !rows.slice(0, i).some(other => other.value === row.value) &&
++        row.color.length === 3 && row.color.every(c => Number.isInteger(c) && c >= 0 && c <= 255))
++}
+diff --git a/coolercontrol-ui/src/utils/lcdSensors.ts b/coolercontrol-ui/src/utils/lcdSensors.ts
+new file mode 100644
+index 0000000..14527ba
+--- /dev/null
++++ b/coolercontrol-ui/src/utils/lcdSensors.ts
+@@ -0,0 +1,25 @@
++import type { Status } from '@/models/Status'
++
++// Typed IDs are local to LCD TempSource; they never enter the cooling profile path.
++export function lcdSensors(status: Status) {
++    const sensors: Array<{ id: string; channel: string; value: string; unit: string }> = []
++    const fresh = Date.now() - Date.parse(status.timestamp) <= 5000
++    const display = (value: number | undefined, digits: number) =>
++        fresh && value != null && Number.isFinite(value) ? value.toFixed(digits) : '--'
++    for (const temp of status.temps) {
++        sensors.push({ id: temp.name, channel: temp.name, value: display(temp.temp, 1), unit: '°C' })
++    }
++    for (const channel of status.channels) {
++        if (channel.rpm != null) {
++            sensors.push({ id: `@rpm:${channel.name}`, channel: channel.name,
++                value: display(channel.rpm, 0), unit: 'RPM' })
++        }
++        // A fan's PWM percentage is not CPU/GPU load or memory occupancy.
++        const remainingQuota = /^openai_weekly_(?:[a-f0-9]{12}_)?remaining$/.test(channel.name)
++        if (channel.duty != null && (channel.name.toLowerCase().includes('load') || remainingQuota)) {
++            sensors.push({ id: `@percent:${channel.name}`, channel: channel.name,
++                value: display(channel.duty, 1), unit: '%' })
++        }
++    }
++    return sensors
++}
+diff --git a/coolercontrol-ui/src/views/LcdView.vue b/coolercontrol-ui/src/views/LcdView.vue
+index dbf4e04..88aa2c8 100644
+--- a/coolercontrol-ui/src/views/LcdView.vue
++++ b/coolercontrol-ui/src/views/LcdView.vue
+@@ -58,6 +58,10 @@ import Listbox, { ListboxChangeEvent } from 'primevue/listbox'
+ import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
+ import { useConfirm } from 'primevue/useconfirm'
+ import InputText from 'primevue/inputtext'
++import SensorStylePicker from '@/components/SensorStylePicker.vue'
++import GraphThresholdEditor from '@/components/GraphThresholdEditor.vue'
++import { graphThresholdsValid, type GraphThresholdDraft } from '@/utils/graphThresholds'
++import { lcdSensors } from '@/utils/lcdSensors'
+ import { ElLoading } from 'element-plus'
+ import { svgLoader, svgLoaderViewBox } from '@/models/Loader.ts'
+ import { useI18n } from 'vue-i18n'
+@@ -79,6 +83,7 @@ interface AvailableTemp {
+     tempFrontendName: string
+     lineColor: string
+     temp: string
++    unit: string
+ }
+ 
+ interface AvailableTempSources {
+@@ -119,7 +124,7 @@ for (const device of deviceStore.allDevices()) {
+         continue
+     }
+     for (const mode of device.info?.channels.get(props.channelName)?.lcd_modes ?? []) {
+-        lcdModes.push(mode)
++        lcdModes.push(mode.name === 'temp' ? { ...mode, frontend_name: t('views.lcd.sensorMode') } : mode)
+     }
+ }
+ 
+@@ -127,7 +132,7 @@ const tempSources: Ref<Array<AvailableTempSources>> = ref([])
+ const fillTempSources = () => {
+     tempSources.value.length = 0
+     for (const device of deviceStore.allDevices()) {
+-        if (device.status.temps.length === 0 || device.info == null) {
++        if (device.info == null) {
+             continue
+         }
+         const deviceSettings = settingsStore.allUIDeviceSettings.get(device.uid)!
+@@ -136,13 +141,14 @@ const fillTempSources = () => {
+             deviceName: deviceSettings.name,
+             temps: [],
+         }
+-        for (const temp of device.status.temps) {
++        for (const temp of lcdSensors(device.status)) {
+             deviceSource.temps.push({
+                 deviceUID: device.uid,
+-                tempName: temp.name,
+-                tempFrontendName: deviceSettings.sensorsAndChannels.get(temp.name)!.name,
+-                lineColor: deviceSettings.sensorsAndChannels.get(temp.name)!.color,
+-                temp: temp.temp.toFixed(1),
++                tempName: temp.id,
++                tempFrontendName: deviceSettings.sensorsAndChannels.get(temp.channel)?.name ?? device.info.channels.get(temp.channel)?.label ?? temp.channel,
++                lineColor: deviceSettings.sensorsAndChannels.get(temp.channel)?.color ?? '#a0a0a0',
++                temp: temp.value,
++                unit: temp.unit,
+             })
+         }
+         if (deviceSource.temps.length === 0) {
+@@ -186,6 +192,10 @@ if (startingDeviceSetting?.lcd != null) {
+     }
+ }
+ 
++const selectedSensorStyle = ref(startingDeviceSetting?.lcd?.sensor_style ?? 'classic')
++const graphThresholds = ref<GraphThresholdDraft[]>(
++    (startingDeviceSetting?.lcd?.graph_thresholds ?? []).map(row => ({ ...row, color: [...row.color] })),
++)
+ const selectedLcdMode: Ref<LcdMode> = ref(startingLcdMode)
+ const selectedBrightness: Ref<number> = ref(startingBrightness)
+ const selectedOrientation: Ref<number> = ref(startingOrientation)
+@@ -272,12 +282,20 @@ const saveLCDSetting = async () => {
+         return
+     }
+     const setting = new DeviceSettingWriteLcdDTO(selectedLcdMode.value.name)
++    if (setting.mode === 'temp') {
++        if (!graphThresholdsValid(graphThresholds.value)) {
++            toast.add({ severity: 'error', summary: t('common.error'), detail: t('views.lcd.graphInvalid'), life: 6000 })
++            return
++        }
++        setting.graph_thresholds = graphThresholds.value.map(row => ({ value: row.value!, color: [...row.color] }))
++    }
+     if (selectedLcdMode.value.brightness) {
+         setting.brightness = selectedBrightness.value
+     }
+     if (selectedLcdMode.value.orientation) {
+         setting.orientation = selectedOrientation.value
+     }
++    if (setting.mode === 'temp') setting.sensor_style = selectedSensorStyle.value
+     if (setting.mode === 'temp' && chosenTemp.value != null) {
+         setting.temp_source = new TempSource(chosenTemp.value.deviceUID, chosenTemp.value.tempName)
+     }
+@@ -338,12 +356,12 @@ const saveNameFunction = async (newName: string): Promise<boolean> => {
+ }
+ 
+ const updateTemps = () => {
++    const devices = new Map(Array.from(deviceStore.allDevices(), device => [device.uid, device]))
+     for (const tempDevice of tempSources.value) {
++        const device = devices.get(tempDevice.deviceUID)
++        const readings = device ? lcdSensors(device.status) : []
+         for (const availableTemp of tempDevice.temps) {
+-            availableTemp.temp =
+-                deviceStore.currentDeviceStatus
+-                    .get(availableTemp.deviceUID)!
+-                    .get(availableTemp.tempName)!.temp || '0.0'
++            availableTemp.temp = readings.find(s => s.id === availableTemp.tempName)?.value ?? '--'
+         }
+     }
+ }
+@@ -456,6 +474,8 @@ onMounted(async () => {
+             selectedLcdMode,
+             selectedBrightness,
+             selectedOrientation,
++            selectedSensorStyle,
++            graphThresholds,
+             chosenTemp,
+             imagesPath,
+             imagesDelayInterval,
+@@ -643,6 +663,9 @@ onUnmounted(() => {
+                     "
+                     class="mt-0 mr-4 w-96"
+                 >
++                    <SensorStylePicker v-model="selectedSensorStyle" :title="t('views.lcd.sensorStyle')" />
++                    <GraphThresholdEditor v-if="selectedSensorStyle === 'mono_trace'"
++                        v-model="graphThresholds" :unit="chosenTemp?.unit ?? '°C'" />
+                     <small class="ml-3 font-light text-sm text-text-color-secondary">
+                         {{ t('views.lcd.tempSource') }}
+                     </small>
+@@ -680,7 +703,7 @@ onUnmounted(() => {
+                                         :style="{ color: slotProps.option.lineColor }"
+                                     />{{ slotProps.option.tempFrontendName }}
+                                 </div>
+-                                <div>{{ slotProps.option.temp }} {{ t('common.tempUnit') }}</div>
++                                <div>{{ slotProps.option.temp }} {{ slotProps.option.unit }}</div>
+                             </div>
+                         </template>
+                     </Listbox>
+diff --git a/coolercontrold/cc-image/examples/metric_previews.rs b/coolercontrold/cc-image/examples/metric_previews.rs
+new file mode 100644
+index 0000000..1689784
+--- /dev/null
++++ b/coolercontrold/cc-image/examples/metric_previews.rs
+@@ -0,0 +1,22 @@
++use cc_image::{LcdImageGenerator, SensorUnit, SENSOR_STYLES};
++
++fn main() -> anyhow::Result<()> {
++    let output = std::path::PathBuf::from(std::env::args().nth(1).expect("output directory"));
++    std::fs::create_dir_all(&output)?;
++    let generator = LcdImageGenerator::new();
++    for style in SENSOR_STYLES {
++        for (name, label, unit, value) in [
++            ("rpm", "TL FAN 1", SensorUnit::Rpm, 1850.0),
++            ("cpu", "CPU LOAD", SensorUnit::Percent, 37.5),
++            ("gpu", "GPU LOAD", SensorUnit::Percent, 88.0),
++            ("ram", "RAM USED", SensorUnit::Percent, 62.4),
++            ("vram", "VRAM USED", SensorUnit::Percent, 66.0),
++            ("missing", "NO DATA", SensorUnit::Percent, f64::NAN),
++        ] {
++            let history: Vec<_> = (0..60).map(|i| unit.maximum() * (0.5 + (i as f64 * 0.2).sin()*0.2)).collect();
++            let png = generator.generate_metric_image(value, label, style, &history, None, unit)?.0;
++            std::fs::write(output.join(format!("{style}-{name}.png")), png)?;
++        }
++    }
++    Ok(())
++}
+diff --git a/coolercontrold/cc-image/examples/reserve_previews.rs b/coolercontrold/cc-image/examples/reserve_previews.rs
+new file mode 100644
+index 0000000..a08c09f
+--- /dev/null
++++ b/coolercontrold/cc-image/examples/reserve_previews.rs
+@@ -0,0 +1,14 @@
++use cc_image::{LcdImageGenerator, SensorUnit};
++
++fn main() -> anyhow::Result<()> {
++    let output = std::env::args().nth(1).expect("output directory");
++    std::fs::create_dir_all(&output)?;
++    let generator = LcdImageGenerator::new();
++    for (name, value) in [("100", 100.0), ("82", 82.0), ("50", 50.0), ("10", 10.0),
++                          ("0", 0.0), ("unavailable", f64::NAN)] {
++        let (png, _) = generator.generate_metric_image(value, "Codex weekly left", "mono_reserve",
++            &[], None, SensorUnit::Percent)?;
++        std::fs::write(std::path::Path::new(&output).join(format!("{name}.png")), png)?;
++    }
++    Ok(())
++}
+diff --git a/coolercontrold/cc-image/examples/sensor_style_previews.rs b/coolercontrold/cc-image/examples/sensor_style_previews.rs
+new file mode 100644
+index 0000000..123d638
+--- /dev/null
++++ b/coolercontrold/cc-image/examples/sensor_style_previews.rs
+@@ -0,0 +1,13 @@
++use cc_image::{LcdImageGenerator, SENSOR_STYLES};
++
++fn main() -> anyhow::Result<()> {
++    let output = std::env::args().nth(1).expect("output directory");
++    std::fs::create_dir_all(&output)?;
++    let generator = LcdImageGenerator::new();
++    let history: Vec<_> = (0..60).map(|i| 48.0 + i as f64 * 0.28 + (i as f64 * 0.3).sin()*7.0).collect();
++    for style in SENSOR_STYLES {
++        let (png, _) = generator.generate_sensor_image(67.4, "CPU PACKAGE", style, &history, None)?;
++        std::fs::write(std::path::Path::new(&output).join(format!("{style}.png")), png)?;
++    }
++    Ok(())
++}
+diff --git a/coolercontrold/cc-image/examples/trace_previews.rs b/coolercontrold/cc-image/examples/trace_previews.rs
+new file mode 100644
+index 0000000..3ec38e5
+--- /dev/null
++++ b/coolercontrold/cc-image/examples/trace_previews.rs
+@@ -0,0 +1,17 @@
++use cc_image::{LcdImageGenerator, SensorUnit};
++
++fn main() -> anyhow::Result<()> {
++    let output = std::path::PathBuf::from(std::env::args().nth(1).expect("output directory"));
++    std::fs::create_dir_all(&output)?;
++    let generator = LcdImageGenerator::new();
++    let thresholds = [(70.0, (255,160,40)), (85.0, (255,64,64))];
++    for (name, value) in [("white",55.0), ("amber",75.0), ("red",90.0)] {
++        let mut history: Vec<_> = (0..60).map(|i| 28.0+i as f64*0.55+(i as f64*0.24).sin()*9.0).collect();
++        for i in 50..60 { history[i] += (value-history[59]) * ((i-49) as f64/10.0); }
++        history[59] = value;
++        let png = generator.generate_metric_image_with_thresholds(value, "", "mono_trace",
++            &history, None, SensorUnit::Celsius, &thresholds)?.0;
++        std::fs::write(output.join(format!("{name}.png")), png)?;
++    }
++    Ok(())
++}
+diff --git a/coolercontrold/cc-image/src/lcd.rs b/coolercontrold/cc-image/src/lcd.rs
+index 01c3979..737db3a 100644
+--- a/coolercontrold/cc-image/src/lcd.rs
++++ b/coolercontrold/cc-image/src/lcd.rs
+@@ -47,6 +47,161 @@ pub struct LcdImageGenerator {
+     font_variable: Font,
+ }
+ 
++#[cfg(test)]
++mod lianli_sensor_style_tests {
++    use super::*;
++
++    #[test]
++    fn reserve_ring_disappears_proportionally_and_missing_is_not_zero() {
++        let generator = LcdImageGenerator::new();
++        let render = |value| image::load_from_memory(&generator.generate_metric_image(
++            value, "Codex weekly left", "mono_reserve", &[], None,
++            crate::SensorUnit::Percent).unwrap().0).unwrap().to_rgb8();
++        let lit = |image: &image::RgbImage| image.pixels().filter(|p| p[0] > 127).count() as f64;
++        let full = lit(&render(100.0));
++        assert!(full > 6000.0);
++        for value in [82.0, 50.0, 10.0] {
++            let image = render(value);
++            assert!((lit(&image) / full - value / 100.0).abs() < 0.02);
++            assert!(image.pixels().all(|p| p[0] == p[1] && p[1] == p[2]));
++            assert_eq!(image.get_pixel(200, 200).0, [0, 0, 0]);
++        }
++        assert_eq!(lit(&render(0.0)), 0.0);
++        assert_eq!(render(-20.0), render(0.0));
++        assert_eq!(render(120.0), render(100.0));
++        assert!(lit(&render(f64::NAN)) > 0.0);
++        assert!(!crate::sensor_style_uses_history("mono_reserve"));
++    }
++
++    #[test]
++    fn minimal_trace_is_graph_only_and_colors_switch_at_inclusive_thresholds() {
++        use crate::{SensorUnit, sensor_styles::graph_color};
++        let thresholds = [(85.0, (255,0,0)), (70.0, (255,160,40))];
++        assert_eq!(graph_color(69.99, &thresholds), (255,255,255));
++        assert_eq!(graph_color(70.0, &thresholds), (255,160,40));
++        assert_eq!(graph_color(84.99, &thresholds), (255,160,40));
++        assert_eq!(graph_color(85.0, &thresholds), (255,0,0));
++        assert_eq!(graph_color(100.0, &thresholds), (255,0,0));
++        assert_eq!(graph_color(60.0, &thresholds), (255,255,255));
++        let generator = LcdImageGenerator::new();
++        let history: Vec<_> = (0..60).map(|i| 40.0+(i as f64*0.2).sin()*20.0).collect();
++        let render = |value, label: &str, rules: &[(f64, (u8,u8,u8))]| {
++            generator.generate_metric_image_with_thresholds(value, label, "mono_trace", &history,
++                None, SensorUnit::Percent, rules).unwrap().0
++        };
++        let white = render(60.0, "No label should appear", &thresholds);
++        assert_eq!(white, render(60.0, "Different label", &[]));
++        let image = image::load_from_memory(&white).unwrap().to_rgb8();
++        assert!(image.pixels().all(|p| p[0] == p[1] && p[1] == p[2]));
++        assert_eq!(image.get_pixel(200,20).0, [0,0,0]);
++        assert!(image.pixels().any(|p| p[0] == 255));
++        let red = image::load_from_memory(&render(85.0, "", &thresholds)).unwrap().to_rgb8();
++        assert!(red.pixels().all(|p| p[1] == 0 && p[2] == 0));
++        assert!(red.pixels().any(|p| p[0] > 200));
++        let missing = image::load_from_memory(&render(f64::NAN, "", &thresholds)).unwrap().to_rgb8();
++        assert!(missing.pixels().all(|p| p.0 == [0,0,0]));
++        assert!(crate::sensor_style_uses_history("mono_trace"));
++    }
++
++    #[test]
++    fn metric_units_all_styles_and_missing_samples() {
++        use crate::SensorUnit;
++        let generator = LcdImageGenerator::new();
++        assert_eq!(SensorUnit::Rpm.value(1234.4), "1234");
++        assert_eq!(SensorUnit::Percent.reading(42.5), "42.5 %");
++        assert_eq!(SensorUnit::Rpm.range(), "0–4000 RPM");
++        assert_eq!(SensorUnit::Rpm.ratio(2000.0), 0.5);
++        assert_eq!(SensorUnit::Percent.value(f64::NAN), "--");
++        for style in crate::SENSOR_STYLES {
++            for (unit, value) in [(SensorUnit::Percent, 65.4), (SensorUnit::Rpm, 1850.0),
++                                  (SensorUnit::Rpm, 0.0), (SensorUnit::Percent, f64::NAN)] {
++                let png = generator.generate_metric_image(value, "Загрузка / обороты", style,
++                    &[0.0, unit.maximum()/2.0], None, unit).unwrap().0;
++                let image = image::load_from_memory(&png).unwrap().to_rgb8();
++                assert_eq!(image.dimensions(), (400,400));
++                if style.starts_with("mono_") {
++                    assert!(image.pixels().all(|p| p[0] == p[1] && p[1] == p[2]));
++                }
++            }
++            let percent = generator.generate_metric_image(50.0, "Sensor", style, &[], None, SensorUnit::Percent).unwrap().0;
++            let rpm = generator.generate_metric_image(50.0, "Sensor", style, &[], None, SensorUnit::Rpm).unwrap().0;
++            assert_ne!(percent, rpm);
++        }
++    }
++
++    #[test]
++    fn monochrome_styles_stay_grayscale_even_at_high_temperatures() {
++        let generator = LcdImageGenerator::new();
++        for style in crate::SENSOR_STYLES.iter().filter(|s| s.starts_with("mono_")) {
++            let mut previous = None;
++            for temp in [-12.5, 0.0, 67.4, 95.0, 125.0] {
++                let png = generator.generate_sensor_image(temp, "Температура CPU", style,
++                                                          &[30.0, 50.0, temp], None).unwrap().0;
++                let image = image::load_from_memory(&png).unwrap().to_rgb8();
++                assert_eq!(image.dimensions(), (400,400));
++                assert!(image.pixels().all(|p| p[0] == p[1] && p[1] == p[2]));
++                if let Some(previous) = &previous {
++                    // Trace has no numeric label: negative values and zero share the lower axis bound.
++                    if !matches!(*style, "mono_trace" | "mono_reserve" | "mono_reverse") || temp != 0.0 {
++                        assert_ne!(&png, previous);
++                    }
++                }
++                previous = Some(png);
++            }
++        }
++        assert!(crate::sensor_style_uses_history("mono_graph"));
++        assert!(crate::sensor_style_uses_history("mono_signal"));
++        assert!(crate::sensor_style_uses_history("trend"));
++        assert!(!crate::sensor_style_uses_history("mono_minimal"));
++        assert!(crate::sensor_style_uses_history("mono_reverse"));
++        for style in ["mono_graph", "mono_signal", "mono_reverse"] {
++            let first = generator.generate_sensor_image(50.0, "CPU", style, &[10.0,50.0], None).unwrap().0;
++            let second = generator.generate_sensor_image(50.0, "CPU", style, &[90.0,50.0], None).unwrap().0;
++            assert_ne!(first, second);
++        }
++    }
++
++    #[test]
++    fn every_style_renders_a_distinct_valid_frame_and_rejects_unknown_styles() {
++        let generator = LcdImageGenerator::new();
++        let mut outputs = Vec::new();
++        for style in crate::SENSOR_STYLES {
++            let (png, _) = generator.generate_sensor_image(67.4, "CPU PACKAGE", style,
++                                                           &[40.0, 50.0, 67.4], None).unwrap();
++            let image = image::load_from_memory(&png).unwrap();
++            let size = if *style == "classic" { 320 } else { 400 };
++            assert_eq!((image.width(), image.height()), (size, size));
++            assert!(outputs.iter().all(|other| other != &png));
++            outputs.push(png);
++        }
++        assert!(generator.generate_sensor_image(50.0, "CPU", "unknown", &[], None).is_err());
++    }
++
++    #[test]
++    fn trend_uses_real_history_and_other_styles_track_current_temperature() {
++        let generator = LcdImageGenerator::new();
++        let first = generator.generate_sensor_image(50.0, "CPU", "trend", &[10.0, 50.0], None).unwrap().0;
++        let second = generator.generate_sensor_image(50.0, "CPU", "trend", &[90.0, 50.0], None).unwrap().0;
++        assert_ne!(first, second);
++        for style in ["digital", "ring", "dial"] {
++            let low = generator.generate_sensor_image(30.0, "CPU", style, &[], None).unwrap().0;
++            let high = generator.generate_sensor_image(90.0, "CPU", style, &[], None).unwrap().0;
++            assert_ne!(low, high);
++        }
++    }
++
++    #[test]
++    fn unicode_sensor_names_and_signed_temperatures_render_without_panics() {
++        let generator = LcdImageGenerator::new();
++        for style in crate::SENSOR_STYLES {
++            for temp in [-12.5, 0.0, 125.0] {
++                assert!(generator.generate_sensor_image(temp, "Температура процессора", style,
++                                                         &[temp], None).is_ok());
++            }
++        }
++    }
++}
++
+ impl Default for LcdImageGenerator {
+     fn default() -> Self {
+         Self::new()
+@@ -67,6 +222,41 @@ impl LcdImageGenerator {
+         }
+     }
+ 
++    /// Render a selectable sensor style. Classic retains the original renderer.
++    pub fn generate_sensor_image(
++        &self, temp: f64, label: &str, style: &str, history: &[f64],
++        template: Option<ImageTemplate>,
++    ) -> Result<(Vec<u8>, ImageTemplate)> {
++        if !temp.is_finite() { return Err(anyhow!("Sensor temperature must be finite")); }
++        self.generate_metric_image(temp, label, style, history, template, crate::SensorUnit::Celsius)
++    }
++
++    pub fn generate_metric_image(
++        &self, temp: f64, label: &str, style: &str, history: &[f64],
++        template: Option<ImageTemplate>, unit: crate::SensorUnit,
++    ) -> Result<(Vec<u8>, ImageTemplate)> {
++        self.generate_metric_image_with_thresholds(temp, label, style, history, template, unit, &[])
++    }
++
++    pub fn generate_metric_image_with_thresholds(
++        &self, temp: f64, label: &str, style: &str, history: &[f64],
++        template: Option<ImageTemplate>, unit: crate::SensorUnit,
++        thresholds: &[(f64, (u8, u8, u8))],
++    ) -> Result<(Vec<u8>, ImageTemplate)> {
++        if style == "classic" && unit == crate::SensorUnit::Celsius && temp.is_finite() {
++            return self.generate_single_temp_image(temp, label, template);
++        }
++        let image = if style == "mono_trace" {
++            crate::sensor_styles::render_graph(temp, history, unit, thresholds)?
++        } else {
++            crate::sensor_styles::render(temp, label, style, history,
++                                        &self.font_mono, &self.font_variable, unit)?
++        };
++        let mut output = Cursor::new(Vec::new());
++        image.encode(ImageFormat::Png, &mut output).map_err(|e| anyhow!("{e}"))?;
++        Ok((output.into_inner(), ImageTemplate(image)))
++    }
++
+     /// Generates a single-temperature gauge image and returns the PNG bytes
+     /// along with a reusable template. When an existing `template` is
+     /// provided, the expensive gauge-circle generation is skipped and only
+@@ -355,7 +545,7 @@ impl LcdImageGenerator {
+         } else if label.starts_with('Δ') {
+             "Δ"
+         } else {
+-            label.split_at(8).0
++            label.char_indices().nth(8).map_or(label, |(index, _)| &label[..index])
+         };
+         TextLayout::new()
+             .with_align(TextAlign::Center)
+diff --git a/coolercontrold/cc-image/src/lib.rs b/coolercontrold/cc-image/src/lib.rs
+index 60bcbed..661a31e 100644
+--- a/coolercontrold/cc-image/src/lib.rs
++++ b/coolercontrold/cc-image/src/lib.rs
+@@ -17,6 +17,8 @@
+  */
+ 
+ mod lcd;
++mod sensor_styles;
++pub use sensor_styles::{SENSOR_STYLES, sensor_style_uses_history, SensorUnit};
+ mod processing;
+ 
+ pub use lcd::{ImageTemplate, LcdImageGenerator, DEFAULT_LCD_SHUTDOWN_IMAGE};
+diff --git a/coolercontrold/cc-image/src/sensor_styles.rs b/coolercontrold/cc-image/src/sensor_styles.rs
+new file mode 100644
+index 0000000..1d18f01
+--- /dev/null
++++ b/coolercontrold/cc-image/src/sensor_styles.rs
+@@ -0,0 +1,239 @@
++//! Original sensor layouts inspired by instrument displays. GPL-3.0-or-later.
++use anyhow::{bail, Context, Result};
++use ril::{Draw, Font, Image, Rgba, TextAlign, TextLayout, TextSegment};
++use tiny_skia::{Color, FillRule, LineCap, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
++
++mod monochrome;
++mod alien;
++
++pub const SENSOR_STYLES: &[&str] = &["classic", "digital", "ring", "dial", "trend",
++    "mono_minimal", "mono_dial", "mono_segment", "mono_graph",
++    "mono_orbit", "mono_relic", "mono_signal", "mono_trace", "mono_reserve", "mono_reverse"];
++
++pub fn sensor_style_uses_history(style: &str) -> bool {
++    matches!(style, "trend" | "mono_graph" | "mono_signal" | "mono_trace" | "mono_reverse")
++}
++
++/// The highest reached threshold colors the whole trace. Input order is irrelevant.
++pub(crate) fn graph_color(value: f64, thresholds: &[(f64, (u8, u8, u8))]) -> (u8, u8, u8) {
++    thresholds.iter().filter(|(at, _)| at.is_finite() && value.is_finite() && value >= *at)
++        .max_by(|a, b| a.0.total_cmp(&b.0)).map_or((255, 255, 255), |(_, color)| *color)
++}
++
++pub(crate) fn render_graph(value: f64, history: &[f64], unit: SensorUnit,
++                          thresholds: &[(f64, (u8, u8, u8))]) -> Result<Image<Rgba>> {
++    let mut canvas = Pixmap::new(400, 400).context("Minimal graph canvas")?;
++    canvas.fill(Color::from_rgba8(0, 0, 0, 255));
++    draw_trace(&mut canvas, value, history, unit, thresholds, (24.0, 40.0, 352.0, 320.0));
++    Ok(Image::from_pixels(400, canvas.pixels().iter()
++        .map(|p| Rgba::new(p.red(), p.green(), p.blue(), p.alpha())).collect::<Vec<_>>()))
++}
++
++fn draw_trace(canvas: &mut Pixmap, value: f64, history: &[f64], unit: SensorUnit,
++              thresholds: &[(f64, (u8, u8, u8))], bounds: (f32, f32, f32, f32)) {
++    let (left, top, width, height) = bounds;
++    if value.is_finite() {
++        let fallback = [value];
++        let history = if history.is_empty() { &fallback[..] } else { history };
++        let samples: Vec<_> = history.iter().rev().take(60).copied().collect::<Vec<_>>()
++            .into_iter().rev().collect();
++        let color = graph_color(value, thresholds);
++        let mut points = Vec::new();
++        for (i, sample) in samples.iter().enumerate() {
++            if !sample.is_finite() { points.clear(); continue; }
++            points.push((left + width - (samples.len()-1-i) as f32 * width / 59.0,
++                         top + height - unit.ratio(*sample) * height));
++        }
++        if points.len() > 1 { line(canvas, &points, 2.5, color); }
++        else if let Some(&(x, y)) = points.first() {
++            if let Some(dot) = PathBuilder::from_circle(x, y, 1.5) {
++                canvas.fill_path(&dot, &paint(color), FillRule::Winding, Transform::identity(), None);
++            }
++        }
++    }
++}
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub enum SensorUnit { Celsius, Percent, Rpm }
++
++impl SensorUnit {
++    pub fn symbol(self) -> &'static str {
++        match self { Self::Celsius => "°C", Self::Percent => "%", Self::Rpm => "RPM" }
++    }
++    pub fn maximum(self) -> f64 { if self == Self::Rpm { 4000.0 } else { 100.0 } }
++    pub fn ratio(self, value: f64) -> f32 {
++        if value.is_finite() { (value / self.maximum()).clamp(0.0, 1.0) as f32 } else { 0.0 }
++    }
++    pub fn value(self, value: f64) -> String {
++        if !value.is_finite() { return "--".to_owned(); }
++        if self == Self::Rpm { format!("{value:.0}") } else { format!("{value:.1}") }
++    }
++    pub fn reading(self, value: f64) -> String { format!("{} {}", self.value(value), self.symbol()) }
++    pub fn range(self) -> String { format!("0–{:.0} {}", self.maximum(), self.symbol()) }
++}
++
++const CYAN: (u8, u8, u8) = (0, 210, 255);
++const DIM: (u8, u8, u8) = (27, 47, 67);
++const MUTED: (u8, u8, u8) = (133, 161, 182);
++
++fn paint(rgb: (u8, u8, u8)) -> Paint<'static> {
++    let mut paint = Paint::default();
++    paint.set_color_rgba8(rgb.0, rgb.1, rgb.2, 255);
++    paint.anti_alias = true;
++    paint
++}
++
++fn line(canvas: &mut Pixmap, points: &[(f32, f32)], width: f32, color: (u8, u8, u8)) {
++    let mut path = PathBuilder::new();
++    for (index, &(x, y)) in points.iter().enumerate() {
++        if index == 0 { path.move_to(x, y); } else { path.line_to(x, y); }
++    }
++    if let Some(path) = path.finish() {
++        let stroke = Stroke { width, line_cap: LineCap::Round, ..Stroke::default() };
++        canvas.stroke_path(&path, &paint(color), &stroke, Transform::identity(), None);
++    }
++}
++
++fn arc(canvas: &mut Pixmap, radius: f32, start: f32, sweep: f32, width: f32, color: (u8,u8,u8)) {
++    if sweep <= 0.0 { return; }
++    let points: Vec<_> = (0..=180).map(|i| {
++        let angle = (start + sweep * i as f32 / 180.0).to_radians();
++        (200.0 + radius * angle.cos(), 200.0 + radius * angle.sin())
++    }).collect();
++    line(canvas, &points, width, color);
++}
++
++fn rect(canvas: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, color: (u8,u8,u8)) {
++    if let Some(r) = Rect::from_xywh(x, y, w, h) {
++        canvas.fill_rect(r, &paint(color), Transform::identity(), None);
++    }
++}
++
++fn text(image: &mut Image<Rgba>, font: &Font, value: &str, size: f32,
++        x: u32, y: u32, color: (u8,u8,u8)) {
++    TextLayout::new().with_align(TextAlign::Center).centered().with_position(x, y)
++        .with_segment(&TextSegment::new(font, value, Rgba::new(color.0, color.1, color.2, 255))
++            .with_size(size)).draw(image);
++}
++
++pub fn render(temp: f64, label: &str, style: &str, history: &[f64],
++              mono: &Font, regular: &Font, unit: SensorUnit) -> Result<Image<Rgba>> {
++    if style == "mono_trace" { return render_graph(temp, history, unit, &[]); }
++    if matches!(style, "mono_reserve" | "mono_reverse") {
++        let mut canvas = Pixmap::new(400, 400).context("Reserve ring canvas")?;
++        canvas.fill(Color::from_rgba8(0, 0, 0, 255));
++        // The source is remaining capacity already: do not invert it again.
++        // No background track; an exhausted quota removes the ring entirely.
++        if temp.is_finite() {
++            arc(&mut canvas, 145.0, -90.0, 360.0 * unit.ratio(temp), 8.0, (255, 255, 255));
++            if style == "mono_reverse" {
++                // All four corners and the stroke fit inside the ring's inner radius.
++                draw_trace(&mut canvas, temp, history, unit, &[], (90.0, 120.0, 220.0, 160.0));
++            }
++        } else {
++            line(&mut canvas, &[(180.0, 200.0), (191.0, 200.0)], 2.0, (150, 150, 150));
++            line(&mut canvas, &[(209.0, 200.0), (220.0, 200.0)], 2.0, (150, 150, 150));
++        }
++        return Ok(Image::from_pixels(400, canvas.pixels().iter()
++            .map(|p| Rgba::new(p.red(), p.green(), p.blue(), p.alpha())).collect::<Vec<_>>()));
++    }
++    if matches!(style, "mono_orbit" | "mono_relic" | "mono_signal") {
++        return alien::render(temp, label, style, history, mono, regular, unit);
++    }
++    if style.starts_with("mono_") {
++        return monochrome::render(temp, label, style, history, mono, regular, unit);
++    }
++    let mut canvas = Pixmap::new(400, 400).context("Sensor canvas")?;
++    canvas.fill(Color::from_rgba8(5, 12, 21, 255));
++    let color = if unit == SensorUnit::Celsius && temp >= 85.0 { (255, 105, 74) } else { CYAN };
++    let ratio = unit.ratio(temp);
++    match style {
++        "digital" => {
++            rect(&mut canvas, 32.0, 33.0, 4.0, 38.0, color);
++            line(&mut canvas, &[(32.0, 285.0), (368.0, 285.0)], 1.0, DIM);
++            for i in 0..40 {
++                rect(&mut canvas, 33.0 + i as f32 * 8.4, 314.0, 5.0, 30.0,
++                     if (i as f32) < ratio * 40.0 { color } else { DIM });
++            }
++        }
++        "classic" | "ring" => {
++            arc(&mut canvas, 168.0, 135.0, 270.0, 15.0, DIM);
++            arc(&mut canvas, 168.0, 135.0, ratio * 270.0, 15.0, color);
++            arc(&mut canvas, 145.0, 135.0, 270.0, 1.0, DIM);
++            for i in 0..=20 {
++                let a = (135.0 + i as f32 * 13.5).to_radians();
++                line(&mut canvas, &[(200.0 + 184.0*a.cos(), 200.0 + 184.0*a.sin()),
++                                   (200.0 + 190.0*a.cos(), 200.0 + 190.0*a.sin())], 2.0, MUTED);
++            }
++        }
++        "dial" => {
++            arc(&mut canvas, 171.0, 140.0, 260.0, 2.0, DIM);
++            for i in 0..=50 {
++                let a = (140.0 + i as f32 * 5.2).to_radians();
++                let inner = if i % 5 == 0 { 143.0 } else { 153.0 };
++                line(&mut canvas, &[(200.0 + inner*a.cos(), 200.0 + inner*a.sin()),
++                                   (200.0 + 166.0*a.cos(), 200.0 + 166.0*a.sin())],
++                     if i % 5 == 0 {3.0} else {1.0}, if unit == SensorUnit::Celsius && i >= 40 {(255,105,74)} else {MUTED});
++            }
++            let a = (140.0 + ratio * 260.0).to_radians();
++            line(&mut canvas, &[(200.0, 200.0), (200.0 + 128.0*a.cos(), 200.0 + 128.0*a.sin())], 4.0, color);
++            if let Some(dot) = PathBuilder::from_circle(200.0, 200.0, 8.0) {
++                canvas.fill_path(&dot, &paint(color), FillRule::Winding, Transform::identity(), None);
++            }
++        }
++        "trend" => {
++            for i in 0..=4 {
++                let y = 205.0 + i as f32 * 32.0;
++                line(&mut canvas, &[(37.0, y), (363.0, y)], 1.0, DIM);
++            }
++            for i in 0..=5 {
++                let x = 37.0 + i as f32 * 65.2;
++                line(&mut canvas, &[(x, 205.0), (x, 333.0)], 1.0, DIM);
++            }
++            let samples: Vec<_> = history.iter().rev().take(60).copied().collect::<Vec<_>>()
++                .into_iter().rev().collect();
++            let points: Vec<_> = samples.iter().enumerate().map(|(i, value)| {
++                (363.0 - (samples.len()-1-i) as f32 * 326.0 / 59.0,
++                 333.0 - unit.ratio(*value) * 128.0)
++            }).collect();
++            if points.len() > 1 { line(&mut canvas, &points, 3.0, color); }
++            if let Some(&(x,y)) = points.last() {
++                if let Some(dot) = PathBuilder::from_circle(x,y,4.0) {
++                    canvas.fill_path(&dot, &paint(color), FillRule::Winding, Transform::identity(), None);
++                }
++            }
++        }
++        _ => bail!("Unknown sensor style: {style}"),
++    }
++    let pixels = canvas.pixels().iter().map(|p| Rgba::new(p.red(),p.green(),p.blue(),p.alpha())).collect::<Vec<_>>();
++    let mut image = Image::from_pixels(400, pixels);
++    let label: String = label.chars().take(22).collect();
++    let value = unit.value(temp);
++    let value_size = if value.len() > 5 { 62.0 } else { 82.0 };
++    match style {
++        "digital" => {
++            text(&mut image, regular, &label, 24.0, 200, 42, MUTED);
++            text(&mut image, mono, &value, value_size + 8.0, 200, 122, (240,248,255));
++            text(&mut image, regular, unit.symbol(), 28.0, 200, 233, color);
++            text(&mut image, mono, &unit.range(), 14.0, 200, 357, MUTED);
++        }
++        "classic" | "ring" => {
++            text(&mut image, regular, &label, 23.0, 200, 113, MUTED);
++            text(&mut image, mono, &value, value_size, 200, 157, (240,248,255));
++            text(&mut image, regular, unit.symbol(), 27.0, 200, 250, color);
++            text(&mut image, mono, &unit.range(), 16.0, 200, 340, MUTED);
++        }
++        "dial" => {
++            text(&mut image, regular, &label, 22.0, 200, 82, MUTED);
++            text(&mut image, mono, &unit.reading(temp), 44.0, 200, 265, (240,248,255));
++            text(&mut image, mono, "0", 16.0, 92, 309, MUTED);
++            text(&mut image, mono, &format!("{:.0}", unit.maximum()), 16.0, 308, 309, MUTED);
++        }
++        "trend" => {
++            text(&mut image, regular, &label, 24.0, 200, 34, MUTED);
++            text(&mut image, mono, &unit.reading(temp), if unit == SensorUnit::Rpm { 48.0 } else { 64.0 }, 200, 96, (240,248,255));
++            text(&mut image, regular, &format!("LAST 60 SAMPLES · {}", unit.range()), 14.0, 200, 354, color);
++        }
++        _ => unreachable!(),
++    }
++    Ok(image)
++}
+diff --git a/coolercontrold/cc-image/src/sensor_styles/alien.rs b/coolercontrold/cc-image/src/sensor_styles/alien.rs
+new file mode 100644
+index 0000000..5733812
+--- /dev/null
++++ b/coolercontrold/cc-image/src/sensor_styles/alien.rs
+@@ -0,0 +1,124 @@
++//! Original monochrome extraterrestrial instrument designs. GPL-3.0-or-later.
++use super::{SensorUnit, arc, line, paint, rect, text};
++use anyhow::{bail, Context, Result};
++use ril::{Font, Image, Rgba};
++use tiny_skia::{Color, FillRule, PathBuilder, Pixmap, Transform};
++
++const WHITE: (u8,u8,u8) = (232,232,232);
++const GRAY: (u8,u8,u8) = (125,125,125);
++const DIM: (u8,u8,u8) = (48,48,48);
++const BLACK: (u8,u8,u8) = (7,7,7);
++
++fn circle(canvas: &mut Pixmap, x: f32, y: f32, r: f32, color: (u8,u8,u8)) {
++    if let Some(path) = PathBuilder::from_circle(x,y,r) {
++        canvas.fill_path(&path,&paint(color),FillRule::Winding,Transform::identity(),None);
++    }
++}
++
++/// Invented glyphs are geometry, independent of system font coverage.
++fn glyph(canvas: &mut Pixmap, x: f32, y: f32, scale: f32, seed: usize, color: (u8,u8,u8)) {
++    let paths = [((0.0,0.0),(5.0,4.0)), ((5.0,4.0),(10.0,0.0)),
++                 ((5.0,4.0),(5.0,17.0)), ((0.0,9.0),(10.0,9.0)),
++                 ((0.0,13.0),(5.0,17.0)), ((5.0,17.0),(10.0,13.0)),
++                 ((0.0,0.0),(0.0,13.0)), ((10.0,0.0),(10.0,13.0))];
++    let mask = [0x75,0xab,0x9e,0x57,0xe3,0xbc,0x4f,0xda][seed % 8];
++    for (i,&(a,b)) in paths.iter().enumerate() {
++        if mask & (1 << i) != 0 {
++            line(canvas,&[(x+a.0*scale,y+a.1*scale),(x+b.0*scale,y+b.1*scale)],1.1,color);
++        }
++    }
++}
++
++fn glyph_row(canvas: &mut Pixmap, y: f32, seed: usize, color: (u8,u8,u8)) {
++    for i in 0..8 { glyph(canvas,88.0+i as f32*30.0,y,1.2,i+seed,color); }
++}
++
++pub(super) fn render(temp: f64, label: &str, style: &str, history: &[f64],
++                     mono: &Font, regular: &Font, unit: SensorUnit) -> Result<Image<Rgba>> {
++    let mut canvas = Pixmap::new(400,400).context("Alien sensor canvas")?;
++    canvas.fill(Color::from_rgba8(7,7,7,255));
++    let ratio = unit.ratio(temp);
++    match style {
++        "mono_orbit" => {
++            arc(&mut canvas,184.0,0.0,360.0,1.0,DIM);
++            for (rotation, minor) in [(35.0_f32,95.0_f32),(-35.0,95.0),(90.0,135.0)] {
++                let r = rotation.to_radians();
++                let points: Vec<_> = (0..=180).map(|i| {
++                    let a = (i as f32*2.0).to_radians();
++                    let (x,y) = (174.0*a.cos(),minor*a.sin());
++                    (200.0+x*r.cos()-y*r.sin(),200.0+x*r.sin()+y*r.cos())
++                }).collect();
++                line(&mut canvas,&points,1.0,GRAY);
++            }
++            for i in 0..48 {
++                let a = (i as f32*7.5).to_radians();
++                let r = if i%4==0 {176.0} else {180.0};
++                line(&mut canvas,&[(200.0+r*a.cos(),200.0+r*a.sin()),
++                                   (200.0+184.0*a.cos(),200.0+184.0*a.sin())],1.0,GRAY);
++            }
++            let a = (-90.0+ratio*360.0).to_radians();
++            circle(&mut canvas,200.0+174.0*a.cos(),200.0+174.0*a.sin(),7.0,BLACK);
++            circle(&mut canvas,200.0+174.0*a.cos(),200.0+174.0*a.sin(),3.5,WHITE);
++            circle(&mut canvas,200.0,200.0,116.0,BLACK);
++            for i in 0..4 { arc(&mut canvas,120.0,i as f32*90.0+12.0,66.0,1.0,DIM); }
++            glyph(&mut canvas,193.0,26.0,1.4,2,WHITE);
++            glyph(&mut canvas,193.0,348.0,1.4,4,WHITE);
++        }
++        "mono_relic" => {
++            glyph_row(&mut canvas,37.0,2,GRAY);
++            let outer = [(95.0,85.0),(305.0,85.0),(357.0,137.0),(357.0,263.0),
++                         (305.0,315.0),(95.0,315.0),(43.0,263.0),(43.0,137.0),(95.0,85.0)];
++            line(&mut canvas,&outer,1.0,GRAY);
++            let inner = [(110.0,101.0),(290.0,101.0),(336.0,147.0),(336.0,253.0),
++                         (290.0,299.0),(110.0,299.0),(64.0,253.0),(64.0,147.0),(110.0,101.0)];
++            line(&mut canvas,&inner,1.0,DIM);
++            for i in 0..8 {
++                line(&mut canvas,&[outer[i],inner[i]],1.0,DIM);
++                if (i as f32) < ratio*8.0 { line(&mut canvas,&[outer[i],outer[i+1]],2.5,WHITE); }
++            }
++            for i in 0..13 {
++                let y=128.0+i as f32*12.0;
++                rect(&mut canvas,24.0,y,5.0,3.0,if (i as f32)<ratio*13.0 {WHITE} else {DIM});
++                rect(&mut canvas,371.0,y,5.0,3.0,if (i as f32)<ratio*13.0 {WHITE} else {DIM});
++            }
++            glyph_row(&mut canvas,344.0,5,WHITE);
++        }
++        "mono_signal" => {
++            for i in 0..6 {
++                glyph(&mut canvas,23.0,40.0+i as f32*59.0,1.0,i,GRAY);
++                glyph(&mut canvas,367.0,40.0+i as f32*59.0,1.0,i+3,GRAY);
++            }
++            glyph_row(&mut canvas,80.0,0,GRAY);
++            for x in [52.0,348.0] {
++                let inward = if x<200.0 {12.0} else {-12.0};
++                line(&mut canvas,&[(x+inward,123.0),(x,123.0),(x,239.0),(x+inward,239.0)],1.0,GRAY);
++            }
++            for i in 0..4 {
++                let y=269.0+i as f32*24.0;
++                line(&mut canvas,&[(62.0,y),(338.0,y)],1.0,(26,26,26));
++            }
++            let samples: Vec<_> = history.iter().rev().take(60).copied().collect::<Vec<_>>()
++                .into_iter().rev().collect();
++            let points: Vec<_> = samples.iter().enumerate().map(|(i,v)| {
++                (338.0-(samples.len()-1-i) as f32*276.0/59.0,341.0-(unit.ratio(*v) * 100.0)*0.72)
++            }).collect();
++            if points.len()>1 { line(&mut canvas,&points,1.5,WHITE); }
++            if let Some(&(x,y)) = points.last() { circle(&mut canvas,x,y,3.0,WHITE); }
++            for i in 0..20 {
++                rect(&mut canvas,64.0+i as f32*14.0,362.0,if i%3==0 {7.0} else {2.0},8.0,
++                     if (i as f32)<ratio*20.0 {GRAY} else {DIM});
++            }
++        }
++        _ => bail!("Unknown alien sensor style: {style}"),
++    }
++    let pixels = canvas.pixels().iter().map(|p|Rgba::new(p.red(),p.green(),p.blue(),p.alpha())).collect::<Vec<_>>();
++    let mut image = Image::from_pixels(400,pixels);
++    let label: String = label.chars().take(18).collect();
++    let value = unit.value(temp);
++    let size = if value.len()>5 {52.0} else {66.0};
++    let (label_y,value_y,unit_y) = if style=="mono_signal" {(42,169,218)} else {(141,202,257)};
++    text(&mut image,regular,&label,17.0,200,label_y,GRAY);
++    text(&mut image,mono,&value,size,200,value_y,WHITE);
++    text(&mut image,mono,unit.symbol(),19.0,200,unit_y,GRAY);
++    Ok(image)
++}
+diff --git a/coolercontrold/cc-image/src/sensor_styles/monochrome.rs b/coolercontrold/cc-image/src/sensor_styles/monochrome.rs
+new file mode 100644
+index 0000000..038598f
+--- /dev/null
++++ b/coolercontrold/cc-image/src/sensor_styles/monochrome.rs
+@@ -0,0 +1,129 @@
++//! Grayscale sensor layouts. No temperature-dependent colour accents.
++use super::{SensorUnit, arc, line, paint, rect, text};
++use anyhow::{bail, Context, Result};
++use ril::{Font, Image, Rgba};
++use tiny_skia::{Color, FillRule, PathBuilder, Pixmap, Transform};
++
++const WHITE: (u8, u8, u8) = (238, 238, 238);
++const GRAY: (u8, u8, u8) = (133, 133, 133);
++const DIM: (u8, u8, u8) = (47, 47, 47);
++
++fn dot(canvas: &mut Pixmap, x: f32, y: f32, radius: f32, color: (u8,u8,u8)) {
++    if let Some(path) = PathBuilder::from_circle(x, y, radius) {
++        canvas.fill_path(&path, &paint(color), FillRule::Winding, Transform::identity(), None);
++    }
++}
++
++/// Seven-segment digits drawn as geometry, including a decimal point and sign.
++fn segments(canvas: &mut Pixmap, value: &str) {
++    let units: f32 = value.chars().map(|c| if c == '.' { 0.3 } else { 1.0 }).sum();
++    let scale = (328.0 / (units * 58.0)).min(1.4);
++    let width = units * 58.0 * scale;
++    let mut x = (400.0 - width) / 2.0;
++    let y = 154.0;
++    let paths = [((8.0,0.0),(40.0,0.0)), ((46.0,8.0),(46.0,40.0)),
++                 ((46.0,54.0),(46.0,86.0)), ((8.0,94.0),(40.0,94.0)),
++                 ((2.0,54.0),(2.0,86.0)), ((2.0,8.0),(2.0,40.0)),
++                 ((8.0,47.0),(40.0,47.0))];
++    let masks = [0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,0x07,0x7f,0x6f];
++    for c in value.chars() {
++        if c == '.' {
++            dot(canvas, x + 4.0*scale, y + 94.0*scale, 3.2*scale, WHITE);
++            x += 17.4*scale;
++            continue;
++        }
++        let mask = c.to_digit(10).map_or(0x40, |n| masks[n as usize]);
++        for (index, &(a,b)) in paths.iter().enumerate() {
++            line(canvas, &[(x+a.0*scale,y+a.1*scale),(x+b.0*scale,y+b.1*scale)],
++                 4.5*scale, if mask & (1 << index) != 0 { WHITE } else { (26,26,26) });
++        }
++        x += 58.0*scale;
++    }
++}
++
++pub(super) fn render(temp: f64, label: &str, style: &str, history: &[f64],
++                     mono: &Font, regular: &Font, unit: SensorUnit) -> Result<Image<Rgba>> {
++    let mut canvas = Pixmap::new(400,400).context("Monochrome sensor canvas")?;
++    let paper = style == "mono_graph";
++    canvas.fill(if paper { Color::from_rgba8(0,0,0,255) }
++                else { Color::from_rgba8(8,8,8,255) });
++    let ratio = unit.ratio(temp);
++    let value = unit.value(temp);
++    match style {
++        "mono_minimal" => {
++            line(&mut canvas, &[(174.0,88.0),(226.0,88.0)], 1.0, GRAY);
++            line(&mut canvas, &[(60.0,322.0),(340.0,322.0)], 1.0, DIM);
++            line(&mut canvas, &[(60.0,322.0),(60.0 + 280.0*ratio,322.0)], 2.0, WHITE);
++            dot(&mut canvas, 60.0 + 280.0*ratio, 322.0, 3.0, WHITE);
++        }
++        "mono_dial" => {
++            arc(&mut canvas,178.0,0.0,360.0,1.0,DIM);
++            for i in 0..=50 {
++                let a = (135.0 + i as f32 * 5.4).to_radians();
++                let r = if i % 5 == 0 {153.0} else {161.0};
++                line(&mut canvas, &[(200.0+r*a.cos(),200.0+r*a.sin()),
++                                   (200.0+170.0*a.cos(),200.0+170.0*a.sin())],
++                     if i % 5 == 0 {2.0} else {1.0}, if i % 5 == 0 {WHITE} else {GRAY});
++            }
++            let a = (135.0 + ratio * 270.0).to_radians();
++            line(&mut canvas, &[(200.0-14.0*a.cos(),200.0-14.0*a.sin()),
++                               (200.0+137.0*a.cos(),200.0+137.0*a.sin())], 2.0, WHITE);
++            dot(&mut canvas,200.0,200.0,5.0,WHITE);
++            dot(&mut canvas,200.0,200.0,2.0,(8,8,8));
++        }
++        "mono_segment" => {
++            line(&mut canvas, &[(36.0,103.0),(364.0,103.0)], 1.0, DIM);
++            segments(&mut canvas, &value);
++            for i in 0..24 {
++                rect(&mut canvas, 45.0+i as f32*13.0, 332.0, 8.0, 9.0,
++                     if (i as f32) < ratio*24.0 {WHITE} else {DIM});
++            }
++        }
++        "mono_graph" => {
++            line(&mut canvas,&[(30.0,78.0),(370.0,78.0)],1.0,DIM);
++            for i in 0..=4 {
++                let y = 227.0+i as f32*25.0;
++                line(&mut canvas,&[(32.0,y),(368.0,y)],1.0,DIM);
++            }
++            let samples: Vec<_> = history.iter().rev().take(60).copied().collect::<Vec<_>>()
++                .into_iter().rev().collect();
++            let points: Vec<_> = samples.iter().enumerate().map(|(i,v)| {
++                (368.0 - (samples.len()-1-i) as f32*336.0/59.0,
++                 327.0 - (unit.ratio(*v) * 100.0))
++            }).collect();
++            if points.len() > 1 { line(&mut canvas,&points,2.0,WHITE); }
++            if let Some(&(x,y)) = points.last() { dot(&mut canvas,x,y,3.0,WHITE); }
++        }
++        _ => bail!("Unknown monochrome style: {style}"),
++    }
++    let pixels = canvas.pixels().iter().map(|p| Rgba::new(p.red(),p.green(),p.blue(),p.alpha())).collect::<Vec<_>>();
++    let mut image = Image::from_pixels(400,pixels);
++    let label: String = label.chars().take(22).collect();
++    match style {
++        "mono_minimal" => {
++            text(&mut image,regular,&label,19.0,200,54,GRAY);
++            text(&mut image,regular,&value,if value.len()>5 {90.0} else {112.0},200,175,WHITE);
++            text(&mut image,regular,unit.symbol(),23.0,200,263,GRAY);
++            text(&mut image,mono,&unit.range(),12.0,200,347,GRAY);
++        }
++        "mono_dial" => {
++            text(&mut image,regular,&label,18.0,200,93,GRAY);
++            text(&mut image,mono,&unit.reading(temp),34.0,200,278,WHITE);
++            text(&mut image,mono,"0",13.0,112,330,GRAY);
++            text(&mut image,mono,&format!("{:.0}", unit.maximum()),13.0,288,330,GRAY);
++        }
++        "mono_segment" => {
++            text(&mut image,mono,&label,20.0,200,62,GRAY);
++            text(&mut image,mono,unit.symbol(),20.0,200,309,GRAY);
++            text(&mut image,mono,"SENSOR",11.0,200,366,GRAY);
++        }
++        "mono_graph" => {
++            text(&mut image,regular,&label,20.0,200,44,WHITE);
++            text(&mut image,regular,&unit.reading(temp),if unit == SensorUnit::Rpm {48.0} else {66.0},200,135,WHITE);
++            text(&mut image,mono,&unit.range(),12.0,200,196,GRAY);
++            text(&mut image,mono,"LAST 60 SAMPLES",12.0,200,358,GRAY);
++        }
++        _ => unreachable!(),
++    }
++    Ok(image)
++}
+diff --git a/coolercontrold/daemon/src/api/actor/device.rs b/coolercontrold/daemon/src/api/actor/device.rs
+index a43ec9a..0aa4cb0 100644
+--- a/coolercontrold/daemon/src/api/actor/device.rs
++++ b/coolercontrold/daemon/src/api/actor/device.rs
+@@ -229,6 +229,8 @@ impl ApiActor<DeviceMessage> for DeviceActor {
+                         .save_lcd_image(&processed_image_data.0, processed_image_data.1)
+                         .await?;
+                     let lcd_settings = LcdSettings {
++                        sensor_style: None,
++            graph_thresholds: Vec::new(),
+                         mode,
+                         brightness,
+                         orientation,
+@@ -443,6 +445,8 @@ impl ApiActor<DeviceMessage> for DeviceActor {
+                         )
+                         .await?;
+                     let lcd_settings = LcdSettings {
++                        sensor_style: None,
++            graph_thresholds: Vec::new(),
+                         mode,
+                         brightness,
+                         orientation,
+diff --git a/coolercontrold/daemon/src/config.rs b/coolercontrold/daemon/src/config.rs
+index feb6b8b..ae68b62 100644
+--- a/coolercontrold/daemon/src/config.rs
++++ b/coolercontrold/daemon/src/config.rs
+@@ -49,6 +49,63 @@ pub struct Config {
+     document: RefCell<DocumentMut>,
+ }
+ 
++#[cfg(test)]
++mod lianli_sensor_style_config_tests {
++    use super::*;
++
++    #[test]
++    fn graph_thresholds_roundtrip_clear_and_reject_invalid_config() {
++        let mut setting: LcdSettings = serde_json::from_value(serde_json::json!({
++            "mode": "temp", "sensor_style": "mono_trace", "colors": [],
++            "graph_thresholds": [{"value":70.5,"color":[255,160,40]}, {"value":85,"color":[255,0,0]}]
++        })).unwrap();
++        let mut channel = Item::Table(Table::new());
++        Config::set_setting_lcd(&mut channel, &setting);
++        channel["lcd"].make_value();
++        assert_eq!(Config::get_lcd(channel.as_table().unwrap()).unwrap().unwrap(), setting);
++        setting.graph_thresholds.clear();
++        Config::set_setting_lcd(&mut channel, &setting);
++        channel["lcd"].make_value();
++        assert!(Config::get_lcd(channel.as_table().unwrap()).unwrap().unwrap().graph_thresholds.is_empty());
++        for rules in ["[{value=70,color=[255,0,0]},{value=70,color=[0,255,0]}]",
++                      "[{value=nan,color=[255,0,0]}]", "[{value=70,color=[256,0,0]}]",
++                      "[{value=70,color=[255,0]}]", "[{color=[255,0,0]}]"] {
++            let doc: DocumentMut = format!("lcd = {{mode='temp', colors=[], graph_thresholds={rules}}}").parse().unwrap();
++            assert!(Config::get_lcd(doc.as_table()).is_err(), "accepted {rules}");
++        }
++        let old: LcdSettings = serde_json::from_value(serde_json::json!({"mode":"temp","colors":[]})).unwrap();
++        assert!(old.graph_thresholds.is_empty());
++        let repeated = vec![crate::setting::LcdGraphThreshold { value: 1.0, color: (255,255,255) }; 9];
++        assert!(crate::setting::LcdGraphThreshold::validate(&repeated).is_err());
++    }
++
++    #[test]
++    fn sensor_style_survives_json_and_toml_roundtrip_and_old_settings_still_load() {
++        for source in ["temp1", "@rpm:port-1-fan-1", "@percent:cpu_load", "@percent:ram_load", "@percent:vram_x_load", "@percent:openai_weekly_remaining"] {
++        for style in cc_image::SENSOR_STYLES {
++            let setting: LcdSettings = serde_json::from_value(serde_json::json!({
++                "mode": "temp", "sensor_style": style, "brightness": 65,
++                "orientation": 90, "colors": [],
++                "temp_source": {"device_uid": "cpu-device", "temp_name": source}
++            })).unwrap();
++            let mut channel = Item::Table(Table::new());
++            Config::set_setting_lcd(&mut channel, &setting);
++            channel["lcd"].make_value();
++            let restored = Config::get_lcd(channel.as_table().unwrap()).unwrap().unwrap();
++            assert_eq!(restored, setting);
++            let response = serde_json::to_value(&restored).unwrap();
++            assert_eq!(response["sensor_style"], *style);
++        }
++        }
++        let old: DocumentMut = "lcd = { mode = 'temp', colors = [] }".parse().unwrap();
++        assert!(Config::get_lcd(old.as_table()).unwrap().unwrap().sensor_style.is_none());
++        let old_json: LcdSettings = serde_json::from_value(serde_json::json!({
++            "mode": "temp", "colors": []
++        })).unwrap();
++        assert!(old_json.sensor_style.is_none());
++    }
++}
++
+ impl Config {
+     /// loads the configuration file data into memory
+     pub async fn load_config_file() -> Result<Self> {
+@@ -391,11 +448,51 @@ impl Config {
+         channel_setting["lighting"]["colors"] = Item::Value(Value::Array(color_array));
+     }
+ 
++    fn get_graph_thresholds(value: Option<&Value>) -> Result<Vec<crate::setting::LcdGraphThreshold>> {
++        let Some(value) = value else { return Ok(Vec::new()); };
++        let entries = value.as_array().context("Graph thresholds must be an array")?;
++        let mut thresholds = Vec::new();
++        for entry in entries {
++            let table = entry.as_inline_table().context("Graph threshold must be a table")?;
++            let at = table.get("value").context("Missing graph threshold value")?;
++            let at = at.as_float().or_else(|| at.as_integer().map(|v| v as f64))
++                .context("Graph threshold must be numeric")?;
++            let rgb = table.get("color").and_then(Value::as_array).context("Missing graph RGB color")?;
++            anyhow::ensure!(rgb.len() == 3, "Graph color requires three RGB components");
++            let mut color = [0u8; 3];
++            for (index, c) in rgb.iter().enumerate() {
++                color[index] = c.as_integer().and_then(|v| u8::try_from(v).ok())
++                    .context("Graph RGB components must be integers in 0..255")?;
++            }
++            thresholds.push(crate::setting::LcdGraphThreshold { value: at, color: (color[0], color[1], color[2]) });
++        }
++        crate::setting::LcdGraphThreshold::validate(&thresholds)?;
++        Ok(thresholds)
++    }
++
+     #[allow(clippy::cast_possible_wrap)]
+     fn set_setting_lcd(channel_setting: &mut Item, lcd: &LcdSettings) {
+         channel_setting["lcd"] = Item::None;
+         channel_setting["lcd"]["mode"] =
+             Item::Value(Value::String(Formatted::new(lcd.mode.to_string())));
++        if let Some(style) = &lcd.sensor_style {
++            channel_setting["lcd"]["sensor_style"] =
++                Item::Value(Value::String(Formatted::new(style.clone())));
++        }
++        if !lcd.graph_thresholds.is_empty() {
++            let mut thresholds = toml_edit::Array::new();
++            for threshold in &lcd.graph_thresholds {
++                let mut entry = toml_edit::InlineTable::new();
++                entry.insert("value", Value::from(threshold.value));
++                let mut color = toml_edit::Array::new();
++                for c in [threshold.color.0, threshold.color.1, threshold.color.2] {
++                    color.push(i64::from(c));
++                }
++                entry.insert("color", Value::Array(color));
++                thresholds.push(Value::InlineTable(entry));
++            }
++            channel_setting["lcd"]["graph_thresholds"] = Item::Value(Value::Array(thresholds));
++        }
+         if let Some(brightness) = lcd.brightness {
+             channel_setting["lcd"]["brightness"] =
+                 Item::Value(Value::Integer(Formatted::new(i64::from(brightness))));
+@@ -907,6 +1004,8 @@ impl Config {
+             }
+             let temp_source = Self::get_temp_source(&lcd_table.clone().into_table())?;
+             Some(LcdSettings {
++                graph_thresholds: Self::get_graph_thresholds(lcd_table.get("graph_thresholds"))?,
++                sensor_style: lcd_table.get("sensor_style").and_then(Value::as_str).map(str::to_owned),
+                 mode,
+                 brightness,
+                 orientation,
+@@ -2489,6 +2588,8 @@ mod tests {
+             let device_uid = "test-device-uid";
+             let channel_name = "lcd1";
+             let lcd = LcdSettings {
++                sensor_style: None,
++            graph_thresholds: Vec::new(),
+                 mode: LcdModeName::Image,
+                 brightness: Some(50),
+                 orientation: Some(90),
+diff --git a/coolercontrold/daemon/src/engine/commanders/lcd.rs b/coolercontrold/daemon/src/engine/commanders/lcd.rs
+index bdf065b..c72066f 100644
+--- a/coolercontrold/daemon/src/engine/commanders/lcd.rs
++++ b/coolercontrold/daemon/src/engine/commanders/lcd.rs
+@@ -17,7 +17,7 @@
+  */
+ 
+ use anyhow::{bail, Context, Result};
+-use cc_image::{ImageTemplate, LcdImageGenerator};
++use cc_image::{ImageTemplate, LcdImageGenerator, SensorUnit};
+ use log::{debug, error, trace, warn};
+ use moro_local::Scope;
+ use std::cell::RefCell;
+@@ -64,6 +64,11 @@ impl LcdCommander {
+         channel_name: &str,
+         lcd_settings: &LcdSettings,
+     ) -> Result<()> {
++        crate::setting::LcdGraphThreshold::validate(&lcd_settings.graph_thresholds)?;
++        let style = lcd_settings.sensor_style.as_deref().unwrap_or("classic");
++        if !cc_image::SENSOR_STYLES.contains(&style) {
++            bail!("Unknown sensor style: {style}");
++        }
+         let temp_source = lcd_settings
+             .temp_source
+             .clone()
+@@ -80,6 +85,13 @@ impl LcdCommander {
+         let _ = self.all_devices.get(device_uid).with_context(|| {
+             format!("Target Device to schedule lcd update must be present: {device_uid}")
+         })?;
++        if temp_source.temp_name.starts_with('@') {
++            let (_, channel) = lcd_metric_source(&temp_source.temp_name)
++                .context("Unknown LCD metric type")?;
++            if !self.all_devices[&temp_source.device_uid].borrow().info.channels.contains_key(channel) {
++                bail!("Unknown LCD metric channel: {channel}");
++            }
++        }
+         self.scheduled_settings
+             .borrow_mut()
+             .entry(device_uid.clone())
+@@ -206,7 +218,9 @@ impl LcdCommander {
+                         .get(channel_name)
+                         .expect("lcd scheduler metadata by channel should be present")
+                         .last_temp_set;
+-                    if last_temp_set == current_source_temp_data.temp {
++                    if last_temp_set == current_source_temp_data.temp
++                        && !cc_image::sensor_style_uses_history(lcd_settings.sensor_style.as_deref().unwrap_or("classic"))
++                        && !self.scheduled_settings_metadata.borrow()[device_uid][channel_name].is_first_application {
+                         trace!(
+                             "lcd scheduler skipping image update as there is no temperature change: {}",
+                             current_source_temp_data.temp
+@@ -232,6 +246,17 @@ impl LcdCommander {
+             .get(setting_temp_source.device_uid.as_str())
+         {
+             let device_read_lock = temp_source_device_lock.borrow();
++            if let Some((unit, channel)) = lcd_metric_source(&setting_temp_source.temp_name) {
++                let info = device_read_lock.info.channels.get(channel)?;
++                let label = info.label.clone().unwrap_or_else(|| channel.to_owned());
++                let value = device_read_lock.status_history.back().and_then(|status| {
++                    if (chrono::Local::now() - status.timestamp).num_seconds() > 5 { return None; }
++                    let metric = status.channels.iter().find(|s| s.name == channel)?;
++                    match unit { SensorUnit::Rpm => metric.rpm.map(f64::from), _ => metric.duty }
++                }).filter(|v| v.is_finite()).unwrap_or(f64::NAN);
++                let temp = if unit == SensorUnit::Rpm { value.round() } else { (value * 10.0).round() / 10.0 };
++                return Some(TempData { temp, label, unit });
++            }
+             let label = device_read_lock
+                 .info
+                 .temps
+@@ -256,7 +281,7 @@ impl LcdCommander {
+                 .map(|temp_status|
+                     // rounded to nearest 10th degree to avoid updating on minuscule degree changes
+                     (temp_status.temp * 10.).round() / 10.)?;
+-            Some(TempData { temp, label })
++            Some(TempData { temp, label, unit: SensorUnit::Celsius })
+         } else {
+             error!(
+                 "Temperature Source Device for LCD Scheduler is currently not present: {}",
+@@ -289,16 +314,30 @@ impl LcdCommander {
+             .image_template
+             .clone();
+         let temp = temp_data_to_display.temp;
++        let unit = temp_data_to_display.unit;
+         let label = temp_data_to_display.label.clone();
++        let thresholds: Vec<_> = lcd_settings.graph_thresholds.iter().map(|t| (t.value, t.color)).collect();
++        let style = lcd_settings.sensor_style.clone().unwrap_or_else(|| "classic".to_owned());
++        let history = {
++            let mut all = self.scheduled_settings_metadata.borrow_mut();
++            let metadata = all.get_mut(&device_uid).unwrap().get_mut(&channel_name).unwrap();
++            if temp.is_finite() { metadata.temp_history.push(temp); } else { metadata.temp_history.clear(); }
++            if metadata.temp_history.len() > 60 { metadata.temp_history.remove(0); }
++            metadata.temp_history.clone()
++        };
+         let self_clone = Rc::clone(&self);
+         let generate_result =
+             moro_local::async_scope!(|scope| -> Result<(Vec<u8>, ImageTemplate)> {
+                 scope
+                     .spawn(async move {
+-                        self_clone.image_generator.generate_single_temp_image(
++                        self_clone.image_generator.generate_metric_image_with_thresholds(
+                             temp,
+                             &label,
++                            &style,
++                            &history,
+                             image_template,
++                            unit,
++                            &thresholds,
+                         )
+                     })
+                     .await
+@@ -310,7 +349,7 @@ impl LcdCommander {
+             return;
+         };
+ 
+-        let image_path = paths::config_dir().join(IMAGE_FILENAME_SINGLE_TEMP);
++        let image_path = paths::config_dir().join(single_temp_image_filename(&device_uid, &channel_name));
+         // std blocking write:
+         if let Err(err) =
+             std::fs::File::create(&image_path).and_then(|mut f| f.write_all(&image_bytes))
+@@ -348,6 +387,8 @@ impl LcdCommander {
+             None
+         };
+         let lcd_settings = LcdSettings {
++            sensor_style: None,
++            graph_thresholds: Vec::new(),
+             mode: LcdModeName::Image,
+             brightness,
+             orientation,
+@@ -443,6 +484,8 @@ impl LcdCommander {
+                     None
+                 };
+                 let lcd_settings = LcdSettings {
++                    sensor_style: None,
++            graph_thresholds: Vec::new(),
+                     mode: LcdModeName::Image,
+                     brightness,
+                     orientation,
+@@ -476,12 +519,14 @@ impl LcdCommander {
+ struct TempData {
+     pub temp: Temp,
+     pub label: TempLabel,
++    pub unit: SensorUnit,
+ }
+ 
+ #[derive(Clone)]
+ pub struct SettingMetadata {
+     /// single-temp metadata
+     pub last_temp_set: f64,
++    pub temp_history: Vec<f64>,
+     pub image_template: Option<ImageTemplate>,
+ 
+     /// carousel metadata
+@@ -497,6 +542,7 @@ impl Default for SettingMetadata {
+     fn default() -> Self {
+         Self {
+             last_temp_set: f64::default(),
++            temp_history: Vec::new(),
+             image_template: None,
+             interval_instant: Instant::now(),
+             processed_images: Vec::new(),
+@@ -505,3 +551,54 @@ impl Default for SettingMetadata {
+         }
+     }
+ }
++
++// Each asynchronous LCD update must keep its own file until the driver has read it.
++fn single_temp_image_filename(device_uid: &str, channel_name: &str) -> String {
++    use sha2::{Digest, Sha256};
++    let mut hash = Sha256::new();
++    hash.update(device_uid.as_bytes());
++    hash.update([0]);
++    hash.update(channel_name.as_bytes());
++    format!("{}_{}", crate::hashutil::to_lower_hex(&hash.finalize()), IMAGE_FILENAME_SINGLE_TEMP)
++}
++
++#[cfg(test)]
++mod lianli_lcd_compat_image_tests {
++    use super::single_temp_image_filename;
++
++    #[test]
++    fn independent_lcd_temperature_updates_do_not_overwrite_each_other() {
++        let root = tempfile::tempdir().unwrap();
++        let first = root.path().join(single_temp_image_filename("device-a", "lcd"));
++        let second = root.path().join(single_temp_image_filename("device-b", "lcd"));
++        let third = root.path().join(single_temp_image_filename("device-a", "lcd2"));
++        assert_ne!(first, second);
++        assert_ne!(first, third);
++        std::fs::write(&first, b"CPU temperature").unwrap();
++        std::fs::write(&second, b"GPU temperature").unwrap();
++        assert_eq!(std::fs::read(&first).unwrap(), b"CPU temperature");
++        assert_eq!(std::fs::read(&second).unwrap(), b"GPU temperature");
++        let unusual = single_temp_image_filename("../device", "../../channel");
++        assert!(!unusual.contains('/'));
++        assert_eq!(single_temp_image_filename("device-a", "lcd"), first.file_name().unwrap().to_str().unwrap());
++    }
++}
++
++fn lcd_metric_source(source: &str) -> Option<(SensorUnit, &str)> {
++    source.strip_prefix("@rpm:").map(|name| (SensorUnit::Rpm, name))
++        .or_else(|| source.strip_prefix("@percent:").map(|name| (SensorUnit::Percent, name)))
++        .filter(|(_, name)| !name.is_empty())
++}
++
++#[cfg(test)]
++mod lianli_metric_source_tests {
++    use super::*;
++    #[test]
++    fn typed_sources_preserve_temperature_names_and_units() {
++        assert_eq!(lcd_metric_source("temp1"), None);
++        assert_eq!(lcd_metric_source("@rpm:fan-1"), Some((SensorUnit::Rpm, "fan-1")));
++        assert_eq!(lcd_metric_source("@percent:ram_load"), Some((SensorUnit::Percent, "ram_load")));
++        assert_eq!(lcd_metric_source("@rpm:"), None);
++        assert_eq!(lcd_metric_source("@unknown:cpu"), None);
++    }
++}
+diff --git a/coolercontrold/daemon/src/engine/main.rs b/coolercontrold/daemon/src/engine/main.rs
+index d139594..7d45e49 100644
+--- a/coolercontrold/daemon/src/engine/main.rs
++++ b/coolercontrold/daemon/src/engine/main.rs
+@@ -843,6 +843,8 @@ impl Engine {
+             }
+         };
+         let lcd_settings = LcdSettings {
++            sensor_style: None,
++            graph_thresholds: Vec::new(),
+             mode: LcdModeName::Image,
+             brightness: None,
+             orientation: None,
+@@ -1943,6 +1945,8 @@ mod tests {
+ 
+     fn lcd_settings_with_image(image_path: Option<String>) -> LcdSettings {
+         LcdSettings {
++            sensor_style: None,
++            graph_thresholds: Vec::new(),
+             mode: LcdModeName::Image,
+             brightness: None,
+             orientation: None,
+diff --git a/coolercontrold/daemon/src/main_loop.rs b/coolercontrold/daemon/src/main_loop.rs
+index 107e4d2..fc308df 100644
+--- a/coolercontrold/daemon/src/main_loop.rs
++++ b/coolercontrold/daemon/src/main_loop.rs
+@@ -68,6 +68,7 @@ use crate::Repos;
+ use anyhow::{Context, Result};
+ use log::{debug, error, info, trace, warn};
+ use moro_local::Scope;
++use std::cell::Cell;
+ use std::ops::Not;
+ use std::rc::Rc;
+ use std::time::{Duration, SystemTime, UNIX_EPOCH};
+@@ -82,7 +83,7 @@ const SNAPSHOT_TIMEOUT_MS: u64 = 400;
+ const WAKE_PAUSE_MINIMUM_S: u64 = 1;
+ // setting (temp) images is pretty quick, <2s, but gifs can take significantly longer >3-4s
+ const LCD_TIMEOUT_S: u64 = 5;
+-const LCD_MAX_UPDATE_RATE_S: f64 = 2.0;
++const LCD_MAX_UPDATE_RATE_S: f64 = 1.0;
+ const FULL_SECOND_MS: u64 = 1000;
+ 
+ /// Run the main loop of the application.
+@@ -237,7 +238,7 @@ async fn fire_snapshots_and_processes<'s>(
+ /// bound work runs on its own thread to not affect the other jobs in the main loop, but will also
+ /// time out to avoid jobs from pilling up.
+ ///
+-/// Due to the long-running time of this function, it will be called every other loop tick.
++/// Target one update per second; skip a tick if the previous transfer is still running.
+ fn fire_lcd_update<'s>(
+     engine: &Rc<Engine>,
+     lcd_update_trigger: &mut LCDUpdateTrigger,
+@@ -248,8 +249,12 @@ fn fire_lcd_update<'s>(
+     {
+         return;
+     }
++    let Some(update_guard) = lcd_update_trigger.begin_update() else {
++        return;
++    };
+     let lcd_commander = Rc::clone(&engine.lcd_commander);
+     scope.spawn(async move {
++        let _update_guard = update_guard;
+         if timeout(
+             Duration::from_secs(LCD_TIMEOUT_S),
+             lcd_commander.update_lcd(),
+@@ -308,10 +313,20 @@ async fn wake_from_sleep(
+ /// `LCDUpdateTrigger` is used to manage the rate at which LCD updates are performed. It ensures
+ /// that LCD updates are not performed too frequently by maintaining a count of main loop
+ /// iterations and comparing it to a calculated threshold. The threshold is calculated by
+-/// dividing the maximum allowed LCD update rate (2.0 seconds) by the configured poll rate.
++/// dividing the minimum LCD update interval (1.0 second) by the configured poll rate.
+ struct LCDUpdateTrigger {
+     loop_count: usize,
+     trigger_count: usize,
++    in_progress: Rc<Cell<bool>>,
++}
++
++// Release even when a timed-out or cancelled update is dropped.
++struct LCDUpdateGuard(Rc<Cell<bool>>);
++
++impl Drop for LCDUpdateGuard {
++    fn drop(&mut self) {
++        self.0.set(false);
++    }
+ }
+ 
+ impl LCDUpdateTrigger {
+@@ -324,6 +339,7 @@ impl LCDUpdateTrigger {
+         Self {
+             loop_count: trigger_count,
+             trigger_count,
++            in_progress: Rc::new(Cell::new(false)),
+         }
+     }
+ 
+@@ -331,7 +347,7 @@ impl LCDUpdateTrigger {
+     ///
+     /// This function returns the number of main loop ticks between LCD updates based on the
+     /// configured poll rate. The calculated value is the ceiling of the division of the
+-    /// maximum allowed LCD update rate (2.0 seconds) by the configured poll rate.
++    /// minimum LCD update interval (1.0 second) by the configured poll rate.
+     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+     fn calc_lcd_update_rate(poll_rate: f64) -> usize {
+         let lcd_update_rate = LCD_MAX_UPDATE_RATE_S / poll_rate;
+@@ -342,6 +358,14 @@ impl LCDUpdateTrigger {
+         self.loop_count += 1;
+     }
+ 
++    fn begin_update(&self) -> Option<LCDUpdateGuard> {
++        if self.in_progress.replace(true) {
++            None
++        } else {
++            Some(LCDUpdateGuard(Rc::clone(&self.in_progress)))
++        }
++    }
++
+     fn not_triggered(&mut self) -> bool {
+         if self.loop_count >= self.trigger_count {
+             self.loop_count = 0;
+@@ -356,6 +380,34 @@ impl LCDUpdateTrigger {
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn lianli_lcd_refreshes_each_second_without_exceeding_sensor_poll_rate() {
++        for (poll_rate, expected_ticks) in [(0.5, 2), (1.0, 1), (2.0, 1), (5.0, 1)] {
++            let mut trigger = LCDUpdateTrigger::new(poll_rate);
++            assert!(!trigger.not_triggered()); // First image is immediate.
++            for tick in 1..=6 {
++                trigger.tick();
++                assert_eq!(!trigger.not_triggered(), tick % expected_ticks == 0);
++            }
++        }
++    }
++
++    #[tokio::test]
++    async fn lianli_slow_lcd_updates_do_not_overlap_and_timeout_releases_slot() {
++        let trigger = LCDUpdateTrigger::new(1.0);
++        let guard = trigger.begin_update().unwrap();
++        assert!(trigger.begin_update().is_none());
++        let result = timeout(Duration::from_millis(1), async move {
++            let _guard = guard;
++            std::future::pending::<()>().await;
++        }).await;
++        assert!(result.is_err());
++        let next = trigger.begin_update().expect("timeout must release the update slot");
++        assert!(trigger.begin_update().is_none());
++        drop(next);
++        assert!(trigger.begin_update().is_some());
++    }
++
+     /// Regression: the snapshot timeout must stay at the historical
+     /// 400 ms value. It bounds engine reaction latency to a
+     /// temperature change to `poll_rate + SNAPSHOT_TIMEOUT_MS` and
+diff --git a/coolercontrold/daemon/src/repositories/liquidctl/liquidctl_repo.rs b/coolercontrold/daemon/src/repositories/liquidctl/liquidctl_repo.rs
+index 4173639..2658bf1 100644
+--- a/coolercontrold/daemon/src/repositories/liquidctl/liquidctl_repo.rs
++++ b/coolercontrold/daemon/src/repositories/liquidctl/liquidctl_repo.rs
+@@ -874,6 +874,8 @@ impl LiquidctlRepo {
+                     continue;
+                 }
+                 let lcd_settings = LcdSettings {
++                    sensor_style: None,
++            graph_thresholds: Vec::new(),
+                     mode: LcdModeName::Liquid,
+                     brightness: None,
+                     orientation: None,
+diff --git a/coolercontrold/daemon/src/repositories/service_plugin/client.rs b/coolercontrold/daemon/src/repositories/service_plugin/client.rs
+index 40cd492..d3c6d54 100644
+--- a/coolercontrold/daemon/src/repositories/service_plugin/client.rs
++++ b/coolercontrold/daemon/src/repositories/service_plugin/client.rs
+@@ -345,7 +345,7 @@ impl DeviceServiceClient {
+                                     image: mode.image,
+                                     colors_min: 0,
+                                     colors_max: 0,
+-                                    type_: LcdModeType::None,
++                                    type_: LcdModeType::Custom,
+                                 })
+                                 .collect();
+                             channel_info.lcd_info = Some(LcdInfo {
+@@ -685,3 +685,39 @@ mod wait_timeout_tests {
+         assert_eq!(service_wait_timeout_for(5.0), Duration::from_secs(40));
+     }
+ }
++
++#[cfg(test)]
++mod lianli_lcd_compat_mode_tests {
++    use super::*;
++
++    #[test]
++    fn plugin_lcd_modes_remain_actionable_in_native_ui() {
++        let modes = ["image", "temp", "carousel"].into_iter().map(|name| {
++            models::v1::lcd_info::LcdModes {
++                name: name.to_owned(),
++                frontend_name: None,
++                brightness: true,
++                orientation: true,
++                image: name == "image",
++            }
++        }).collect();
++        let source = HashMap::from([("lcd".to_owned(), models::v1::ChannelInfo {
++            label: Some("LCD".to_owned()),
++            options: Some(Options::LcdInfo(models::v1::LcdInfo {
++                lcd_modes: modes,
++                screen_width: 400,
++                screen_height: 400,
++                max_image_size_bytes: 20 * 1024 * 1024,
++            })),
++        })]);
++        let mapped = DeviceServiceClient::map_device_info_channels(source);
++        let lcd = &mapped["lcd"];
++        assert_eq!(lcd.lcd_modes.len(), 3);
++        for mode in &lcd.lcd_modes {
++            assert_eq!(mode.type_, LcdModeType::Custom);
++            assert!(mode.brightness && mode.orientation);
++            assert_eq!(mode.image, mode.name == "image");
++        }
++        assert_eq!(lcd.lcd_info.as_ref().unwrap().screen_width, 400);
++    }
++}
+diff --git a/coolercontrold/daemon/src/setting.rs b/coolercontrold/daemon/src/setting.rs
+index dedc0e0..fcf9952 100644
+--- a/coolercontrold/daemon/src/setting.rs
++++ b/coolercontrold/daemon/src/setting.rs
+@@ -113,6 +113,12 @@ pub enum LcdModeName {
+ 
+ #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+ pub struct LcdSettings {
++    /// Inclusive lower bounds for Mono Trace colors. Empty means white.
++    #[serde(default)]
++    pub graph_thresholds: Vec<LcdGraphThreshold>,
++    /// Optional temperature display layout; absent means classic.
++    #[serde(default)]
++    pub sensor_style: Option<String>,
+     /// The Lcd mode name
+     pub mode: LcdModeName,
+ 
+@@ -134,6 +140,24 @@ pub struct LcdSettings {
+     pub temp_source: Option<TempSource>,
+ }
+ 
++#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
++pub struct LcdGraphThreshold {
++    pub value: f64,
++    pub color: (u8, u8, u8),
++}
++
++impl LcdGraphThreshold {
++    pub fn validate(thresholds: &[Self]) -> anyhow::Result<()> {
++        anyhow::ensure!(thresholds.len() <= 8, "At most 8 graph color thresholds are supported");
++        for (i, threshold) in thresholds.iter().enumerate() {
++            anyhow::ensure!(threshold.value.is_finite(), "Graph threshold must be finite");
++            anyhow::ensure!(!thresholds[..i].iter().any(|t| t.value == threshold.value),
++                            "Graph threshold values must be unique");
++        }
++        Ok(())
++    }
++}
++
+ /// Settings for the LCD Carousel.
+ ///
+ /// This can be used to have a carousel of images (static or gif), of sensor data,
