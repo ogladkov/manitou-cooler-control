@@ -1,6 +1,6 @@
 diff --git a/coolercontrol-ui/src/components/GraphThresholdEditor.vue b/coolercontrol-ui/src/components/GraphThresholdEditor.vue
 new file mode 100644
-index 0000000..2cc8deb
+index 0000000..ef38f70
 --- /dev/null
 +++ b/coolercontrol-ui/src/components/GraphThresholdEditor.vue
 @@ -0,0 +1,50 @@
@@ -14,7 +14,7 @@ index 0000000..2cc8deb
 +
 +const id = useId()
 +const rows = defineModel<GraphThresholdDraft[]>({ required: true })
-+const props = defineProps<{ unit: string }>()
++const props = defineProps<{ unit: string; help?: string }>()
 +const { t } = useI18n()
 +function setValue(index: number, value: number | null) {
 +    rows.value = rows.value.map((row, i) => i === index ? { ...row, value } : row)
@@ -36,7 +36,7 @@ index 0000000..2cc8deb
 +<template>
 +    <fieldset class="mb-6 rounded-lg border border-border-one p-3">
 +        <legend class="px-1 text-text-color-secondary">{{ t('views.lcd.graphColors') }}</legend>
-+        <p class="mb-3 text-sm text-text-color-secondary">{{ t('views.lcd.graphColorsHelp') }}</p>
++        <p class="mb-3 text-sm text-text-color-secondary">{{ help ?? t('views.lcd.graphColorsHelp') }}</p>
 +        <div v-for="(row, index) in rows" :key="index" class="mb-3 flex items-end gap-2">
 +            <div class="min-w-0 flex-1">
 +                <label :for="`${id}-graph-threshold-${index}`" class="mb-1 block text-sm">{{ t('views.lcd.graphAt') }}</label>
@@ -440,15 +440,16 @@ index 0000000..c8161c8
 +    })
 +})
 diff --git a/coolercontrol-ui/src/i18n/locales/en.ts b/coolercontrol-ui/src/i18n/locales/en.ts
-index d74ff2a..bf5d789 100644
+index d74ff2a..25ed167 100644
 --- a/coolercontrol-ui/src/i18n/locales/en.ts
 +++ b/coolercontrol-ui/src/i18n/locales/en.ts
-@@ -852,6 +852,26 @@ export default {
+@@ -852,6 +852,27 @@ export default {
              numberOfColorsTooltip: 'Number of Colors to use for the chosen Lighting Mode.',
          },
          lcd: {
 +      sensorMode: 'Sensor',
 +      graphColors: 'Graph color thresholds',
++      reverseColorsHelp: 'White by default. At or above a threshold, the ring and graph use its color. The highest reached threshold wins; below all thresholds they return to white.',
 +      graphColorsHelp: 'White by default. The whole graph uses the color of the highest reached threshold (≥). Remove all thresholds to keep it white.',
 +      graphAt: 'Value ≥',
 +      graphRemove: 'Remove threshold',
@@ -470,7 +471,7 @@ index d74ff2a..bf5d789 100644
              saveLcdSettings: 'Save LCD Settings',
              lcdMode: 'LCD Mode',
              brightness: 'Brightness',
-@@ -860,8 +880,8 @@ export default {
+@@ -860,8 +881,8 @@ export default {
              orientationDegrees: 'Orientation in degrees',
              chooseImage: 'Choose Image',
              dragAndDrop: 'Drag and drop files to here.',
@@ -482,15 +483,16 @@ index d74ff2a..bf5d789 100644
              imagesPathTooltip:
                  'Enter the absolute path to the directory containing images.\nThe directory must contain at least one image file, and they\nmay be static images or gifs. The Carousel will cycle\nthrough them with the selected delay. All files are processed\nupon submission to ensure maximum compatibility.',
 diff --git a/coolercontrol-ui/src/i18n/locales/ru.ts b/coolercontrol-ui/src/i18n/locales/ru.ts
-index 1ced93a..d095fbd 100644
+index 1ced93a..337f0dc 100644
 --- a/coolercontrol-ui/src/i18n/locales/ru.ts
 +++ b/coolercontrol-ui/src/i18n/locales/ru.ts
-@@ -861,6 +861,26 @@ export default {
+@@ -861,6 +861,27 @@ export default {
                  'Количество цветов для использования в выбранном режиме подсветки.',
          },
          lcd: {
 +      sensorMode: 'Показатель',
 +      graphColors: 'Цветовые пороги графика',
++      reverseColorsHelp: 'По умолчанию кольцо и график белые. При значении ≥ порога они принимают его цвет. Действует наибольший достигнутый порог; ниже всех порогов возвращается белый цвет.',
 +      graphColorsHelp: 'По умолчанию график белый. Весь график принимает цвет наибольшего достигнутого порога (≥). Удалите все пороги, чтобы оставить белый цвет.',
 +      graphAt: 'При значении ≥',
 +      graphRemove: 'Удалить порог',
@@ -512,7 +514,7 @@ index 1ced93a..d095fbd 100644
              saveLcdSettings: 'Сохранить настройки LCD',
              lcdMode: 'Режим LCD',
              brightness: 'Яркость',
-@@ -869,8 +889,8 @@ export default {
+@@ -869,8 +890,8 @@ export default {
              orientationDegrees: 'Ориентация в градусах',
              chooseImage: 'Выбрать изображение',
              dragAndDrop: 'Перетащите файлы сюда.',
@@ -699,7 +701,7 @@ index 0000000..95fa827
 +    return 'panorama_minimal'
 +}
 diff --git a/coolercontrol-ui/src/views/LcdView.vue b/coolercontrol-ui/src/views/LcdView.vue
-index dbf4e04..10bdf63 100644
+index dbf4e04..a5f8aca 100644
 --- a/coolercontrol-ui/src/views/LcdView.vue
 +++ b/coolercontrol-ui/src/views/LcdView.vue
 @@ -58,6 +58,13 @@ import Listbox, { ListboxChangeEvent } from 'primevue/listbox'
@@ -907,7 +909,7 @@ index dbf4e04..10bdf63 100644
                  >
                      <div class="flex w-full mr-0">
                          <img
-@@ -641,49 +717,109 @@ onUnmounted(() => {
+@@ -641,49 +717,110 @@ onUnmounted(() => {
                          selectedLcdMode.type === LcdModeType.CUSTOM &&
                          selectedLcdMode.name === 'temp'
                      "
@@ -965,8 +967,9 @@ index dbf4e04..10bdf63 100644
 +                            <h3 v-if="isPanorama && splitPanorama" class="mb-4">{{ t('views.lcd.panoramaLeft') }}</h3>
 +                            <SensorStylePicker v-model="selectedSensorStyle" :title="t('views.lcd.sensorStyle')"
 +                                :panorama="isPanorama" :split="splitPanorama" />
-+                            <GraphThresholdEditor class="lcd-panel-thresholds" v-if="isPanorama || selectedSensorStyle === 'mono_trace'"
-+                                v-model="graphThresholds" :unit="chosenTemp?.unit ?? '°C'" />
++                            <GraphThresholdEditor class="lcd-panel-thresholds" v-if="isPanorama || ['mono_trace', 'mono_reverse'].includes(selectedSensorStyle)"
++                                v-model="graphThresholds" :unit="chosenTemp?.unit ?? '°C'"
++                                :help="selectedSensorStyle === 'mono_reverse' ? t('views.lcd.reverseColorsHelp') : undefined" />
 +                            <small class="ml-3 font-light text-sm text-text-color-secondary">
 +                                {{ t('views.lcd.tempSource') }}
 +                            </small>
@@ -1059,7 +1062,7 @@ index dbf4e04..10bdf63 100644
                  </div>
                  <div
                      v-if="
-@@ -771,6 +907,65 @@ onUnmounted(() => {
+@@ -771,6 +908,65 @@ onUnmounted(() => {
  </template>
  
  <style scoped lang="scss">
@@ -1175,10 +1178,10 @@ index 0000000..a08c09f
 +}
 diff --git a/coolercontrold/cc-image/examples/sensor_style_previews.rs b/coolercontrold/cc-image/examples/sensor_style_previews.rs
 new file mode 100644
-index 0000000..6e20759
+index 0000000..fcb8723
 --- /dev/null
 +++ b/coolercontrold/cc-image/examples/sensor_style_previews.rs
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,53 @@
 +use cc_image::{LcdImageGenerator, SENSOR_STYLES};
 +
 +fn main() -> anyhow::Result<()> {
@@ -1193,6 +1196,9 @@ index 0000000..6e20759
 +        let (png, _) = generator.generate_sensor_image(67.4, "CPU PACKAGE", style, &history, None)?;
 +        std::fs::write(std::path::Path::new(&output).join(format!("{style}.png")), png)?;
 +    }
++    let (critical, _) = generator.generate_metric_image_with_thresholds(85.0, "CPU LOAD", "mono_reverse",
++        &history, None, cc_image::SensorUnit::Percent, &[(85.0, (255,0,0))])?;
++    std::fs::write(std::path::Path::new(&output).join("mono_reverse_critical.png"), critical)?;
 +    for style in cc_image::PANORAMA_STYLES {
 +        let panel = || cc_image::PanoramaPanel { value: 67.4, label: "CPU LOAD", style,
 +            history: &history, unit: cc_image::SensorUnit::Percent, thresholds: &[] };
@@ -1253,10 +1259,10 @@ index 0000000..3ec38e5
 +    Ok(())
 +}
 diff --git a/coolercontrold/cc-image/src/lcd.rs b/coolercontrold/cc-image/src/lcd.rs
-index 01c3979..30a933d 100644
+index 01c3979..8185f90 100644
 --- a/coolercontrold/cc-image/src/lcd.rs
 +++ b/coolercontrold/cc-image/src/lcd.rs
-@@ -47,6 +47,161 @@ pub struct LcdImageGenerator {
+@@ -47,6 +47,187 @@ pub struct LcdImageGenerator {
      font_variable: Font,
  }
  
@@ -1284,6 +1290,32 @@ index 01c3979..30a933d 100644
 +        assert_eq!(render(120.0), render(100.0));
 +        assert!(lit(&render(f64::NAN)) > 0.0);
 +        assert!(!crate::sensor_style_uses_history("mono_reserve"));
++    }
++
++    #[test]
++    fn reverse_threshold_colors_both_ring_and_trace_and_returns_to_white() {
++        use crate::SensorUnit;
++        let generator = LcdImageGenerator::new();
++        for (unit, critical) in [(SensorUnit::Percent, 80.0), (SensorUnit::Celsius, 85.0), (SensorUnit::Rpm, 2400.0)] {
++            let render = |value, rules: &[(f64,(u8,u8,u8))]| {
++                let (png, _) = generator.generate_metric_image_with_thresholds(value, "sensor", "mono_reverse",
++                    &[value;60], None, unit, rules).unwrap();
++                image::load_from_memory(&png).unwrap().to_rgb8()
++            };
++            let rules = [(critical, (255,0,0)), (critical - 10.0, (255,160,40))];
++            let white = render(critical - 20.0, &rules);
++            assert_eq!(white, render(critical - 20.0, &[]));
++            let red = render(critical, &rules);
++            assert!(red.pixels().all(|p| p[1] == 0 && p[2] == 0));
++            assert!(red.enumerate_pixels().any(|(_,y,p)| y < 90 && p[0] > 200), "ring did not change color");
++            assert!(red.enumerate_pixels().any(|(x,y,p)| (90..310).contains(&x) && (120..283).contains(&y) && p[0] > 200), "trace did not change color");
++            let warning = render(critical - 1.0, &rules);
++            assert!(warning.pixels().any(|p| p.0 == [255,160,40]));
++            let missing = render(f64::NAN, &rules);
++            assert_eq!(missing, render(f64::NAN, &[]));
++            assert!(missing.pixels().any(|p| p[0] > 0));
++            assert!(missing.pixels().all(|p| p[0] == p[1] && p[1] == p[2]));
++        }
 +    }
 +
 +    #[test]
@@ -1418,7 +1450,7 @@ index 01c3979..30a933d 100644
  impl Default for LcdImageGenerator {
      fn default() -> Self {
          Self::new()
-@@ -67,6 +222,58 @@ impl LcdImageGenerator {
+@@ -67,6 +248,60 @@ impl LcdImageGenerator {
          }
      }
  
@@ -1448,6 +1480,8 @@ index 01c3979..30a933d 100644
 +        }
 +        let image = if style == "mono_trace" {
 +            crate::sensor_styles::render_graph(temp, history, unit, thresholds)?
++        } else if style == "mono_reverse" {
++            crate::sensor_styles::render_reserve_ring(temp, history, unit, true, thresholds)?
 +        } else {
 +            crate::sensor_styles::render(temp, label, style, history,
 +                                        &self.font_mono, &self.font_variable, unit)?
@@ -1477,7 +1511,7 @@ index 01c3979..30a933d 100644
      /// Generates a single-temperature gauge image and returns the PNG bytes
      /// along with a reusable template. When an existing `template` is
      /// provided, the expensive gauge-circle generation is skipped and only
-@@ -355,7 +562,7 @@ impl LcdImageGenerator {
+@@ -355,7 +590,7 @@ impl LcdImageGenerator {
          } else if label.starts_with('Δ') {
              "Δ"
          } else {
@@ -1486,7 +1520,7 @@ index 01c3979..30a933d 100644
          };
          TextLayout::new()
              .with_align(TextAlign::Center)
-@@ -365,3 +572,99 @@ impl LcdImageGenerator {
+@@ -365,3 +600,99 @@ impl LcdImageGenerator {
              .draw(image);
      }
  }
@@ -1602,10 +1636,10 @@ index 60bcbed..e76800b 100644
  pub use lcd::{ImageTemplate, LcdImageGenerator, DEFAULT_LCD_SHUTDOWN_IMAGE};
 diff --git a/coolercontrold/cc-image/src/sensor_styles.rs b/coolercontrold/cc-image/src/sensor_styles.rs
 new file mode 100644
-index 0000000..0c8e0cb
+index 0000000..9f7229e
 --- /dev/null
 +++ b/coolercontrold/cc-image/src/sensor_styles.rs
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,246 @@
 +//! Original sensor layouts inspired by instrument displays. GPL-3.0-or-later.
 +use anyhow::{bail, Context, Result};
 +use ril::{Draw, Font, Image, Rgba, TextAlign, TextLayout, TextSegment};
@@ -1724,26 +1758,32 @@ index 0000000..0c8e0cb
 +            .with_size(size)).draw(image);
 +}
 +
++pub(crate) fn render_reserve_ring(temp: f64, history: &[f64], unit: SensorUnit,
++                                  with_trace: bool, thresholds: &[(f64, (u8, u8, u8))])
++    -> Result<Image<Rgba>> {
++    let mut canvas = Pixmap::new(400, 400).context("Reserve ring canvas")?;
++    canvas.fill(Color::from_rgba8(0, 0, 0, 255));
++    // The source is remaining capacity already: do not invert it again.
++    // No background track; an exhausted quota removes the ring entirely.
++    if temp.is_finite() {
++        arc(&mut canvas, 145.0, -90.0, 360.0 * unit.ratio(temp), 8.0, graph_color(temp, thresholds));
++        if with_trace {
++            // All four corners and the stroke fit inside the ring's inner radius.
++            draw_trace(&mut canvas, temp, history, unit, thresholds, (90.0, 120.0, 220.0, 160.0));
++        }
++    } else {
++        line(&mut canvas, &[(180.0, 200.0), (191.0, 200.0)], 2.0, (150, 150, 150));
++        line(&mut canvas, &[(209.0, 200.0), (220.0, 200.0)], 2.0, (150, 150, 150));
++    }
++    Ok(Image::from_pixels(400, canvas.pixels().iter()
++        .map(|p| Rgba::new(p.red(), p.green(), p.blue(), p.alpha())).collect::<Vec<_>>()))
++}
++
 +pub fn render(temp: f64, label: &str, style: &str, history: &[f64],
 +              mono: &Font, regular: &Font, unit: SensorUnit) -> Result<Image<Rgba>> {
 +    if style == "mono_trace" { return render_graph(temp, history, unit, &[]); }
 +    if matches!(style, "mono_reserve" | "mono_reverse") {
-+        let mut canvas = Pixmap::new(400, 400).context("Reserve ring canvas")?;
-+        canvas.fill(Color::from_rgba8(0, 0, 0, 255));
-+        // The source is remaining capacity already: do not invert it again.
-+        // No background track; an exhausted quota removes the ring entirely.
-+        if temp.is_finite() {
-+            arc(&mut canvas, 145.0, -90.0, 360.0 * unit.ratio(temp), 8.0, (255, 255, 255));
-+            if style == "mono_reverse" {
-+                // All four corners and the stroke fit inside the ring's inner radius.
-+                draw_trace(&mut canvas, temp, history, unit, &[], (90.0, 120.0, 220.0, 160.0));
-+            }
-+        } else {
-+            line(&mut canvas, &[(180.0, 200.0), (191.0, 200.0)], 2.0, (150, 150, 150));
-+            line(&mut canvas, &[(209.0, 200.0), (220.0, 200.0)], 2.0, (150, 150, 150));
-+        }
-+        return Ok(Image::from_pixels(400, canvas.pixels().iter()
-+            .map(|p| Rgba::new(p.red(), p.green(), p.blue(), p.alpha())).collect::<Vec<_>>()));
++        return render_reserve_ring(temp, history, unit, style == "mono_reverse", &[]);
 +    }
 +    if matches!(style, "mono_orbit" | "mono_relic" | "mono_signal") {
 +        return alien::render(temp, label, style, history, mono, regular, unit);
