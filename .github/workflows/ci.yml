@@ -21,7 +21,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install media test dependencies
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg openjdk-21-jdk-headless
+      - name: Build TRYX frame renderer
+        run: bash scripts/build-tryx-renderer.sh
       - name: Install development dependencies
         run: python -m pip install -e '.[dev]'
       - name: Lint

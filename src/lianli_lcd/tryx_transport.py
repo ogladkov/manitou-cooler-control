@@ -14,6 +14,7 @@ import time
 import tty
 import uuid
 
+from .tryx_renderer import TryxRenderer
 from .tryx_protocol import MAX_FRAME, decode_response, encode_command, screen_config
 
 MEDIA_DIR = "/sdcard/pcMedia"
@@ -37,13 +38,18 @@ class TryxTransport:
         self.prefix = "manitou_cc_" + hashlib.sha256(screen.id.encode()).hexdigest()[:12] + "_"
         self.owned_pattern = re.compile(re.escape(self.prefix) + r"[0-9a-f]{32}\.(jpg|mp4)")
         self.previous = None
+        self.renderer = TryxRenderer(self)
+        self.last_brightness = None
 
-    def _adb(self, *args, timeout=10):
+    def adb_command(self, *args):
         # Never use -d/default-device: another Android device may be plugged in.
         if not self.screen.serial or not re.fullmatch(r"[A-Za-z0-9._:-]+", self.screen.serial):
             raise ValueError("TRYX requires a valid USB serial for targeted ADB access")
+        return ["adb", "-s", self.screen.serial, *args]
+
+    def _adb(self, *args, timeout=10):
         try:
-            result = subprocess.run(["adb", "-s", self.screen.serial, *args],
+            result = subprocess.run(self.adb_command(*args),
                                     capture_output=True, timeout=timeout, check=False)
         except FileNotFoundError as exc:
             raise OSError("TRYX screen control requires adb (sudo apt install adb)") from exc
@@ -107,6 +113,8 @@ class TryxTransport:
             self.file_lock.close()
             self.file_lock = None
         self.last_digest = None
+        self.last_brightness = None
+        self.renderer.close()
 
     def open(self):
         with self.lock:
@@ -149,6 +157,7 @@ class TryxTransport:
                     continue
                 try:
                     self._command("conn")
+                    self.renderer.ping()
                     self.error = None
                 except Exception as exc:
                     self.error = str(exc)
@@ -157,7 +166,9 @@ class TryxTransport:
     def settings(self, brightness):
         with self.lock:
             self.open()
-            self._command("brightness", {"value": brightness})
+            if brightness != self.last_brightness:
+                self._command("brightness", {"value": brightness})
+                self.last_brightness = brightness
 
     def display(self, media, extension, brightness):
         if extension not in ("jpg", "mp4"):
@@ -165,6 +176,13 @@ class TryxTransport:
         digest = hashlib.sha256(media).digest()
         with self.lock:
             self.open()
+            if extension == "jpg":
+                if digest != self.last_digest:
+                    self.renderer.frame(media)
+                    self.last_digest = digest
+                self.settings(brightness)
+                self.error = None
+                return
             if digest != self.last_digest:
                 filename = self.prefix + uuid.uuid4().hex + "." + extension
                 with tempfile.TemporaryDirectory(prefix="manitou-tryx-") as folder:
@@ -174,13 +192,11 @@ class TryxTransport:
                     self._adb("push", str(local), f"{MEDIA_DIR}/{filename}", timeout=20)
                 config = screen_config(filename)
                 self._command("waterBlockScreenId", config)
-                # Firmware occasionally ignores the first configuration update.
-                time.sleep(0.5)
-                self._command("waterBlockScreenId", config)
                 self.previous, self.filename = self.filename, filename
                 self.last_digest = digest
                 self._cleanup()
-            self._command("brightness", {"value": brightness})
+            self.renderer.hide()
+            self.settings(brightness)
             self.error = None
 
     def _cleanup(self):
@@ -194,7 +210,7 @@ class TryxTransport:
     def close(self):
         self.stop.set()
         if self.worker is not None:
-            self.worker.join(timeout=5)
+            self.worker.join(timeout=15)
             if self.worker.is_alive():
                 raise TimeoutError("TRYX keepalive did not stop")
             self.worker = None

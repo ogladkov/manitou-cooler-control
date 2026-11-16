@@ -248,10 +248,11 @@ def test_display_deduplicates_and_keeps_two_files(tmp_path, monkeypatch):
     monkeypatch.setattr(transport, "_adb", adb)
     monkeypatch.setattr(transport, "_command", lambda *a: commands.append(a))
     for content in (b"one", b"two", b"three", b"three"):
-        transport.display(content, "jpg", 70)
+        transport.display(content, "mp4", 70)
     assert len(files) == 2 and set(files.values()) == {b"two", b"three"}
-    assert len([c for c in commands if c[0] == "waterBlockScreenId"]) == 6
-    assert commands[-1] == ("brightness", {"value": 70})
+    assert len([c for c in commands if c[0] == "waterBlockScreenId"]) == 3
+    assert [c for c in commands if c[0] == "brightness"] == [("brightness", {"value": 70})]
+    assert commands[-1][1]["playMode"] == "single"
 
 
 def test_heartbeat_failure_is_visible_to_service(tmp_path, monkeypatch):
@@ -273,3 +274,25 @@ def test_heartbeat_failure_is_visible_to_service(tmp_path, monkeypatch):
         assert controller.error == "USB disconnected"
     finally:
         controller.close()
+
+
+def test_static_frames_never_reset_vendor_layout_or_write_media(tmp_path, monkeypatch):
+    transport = TryxTransport(simulated_screens(True)[-1], tmp_path)
+    monkeypatch.setattr(transport, "open", lambda: None)
+    commands, frames = [], []
+    monkeypatch.setattr(transport, "_command", lambda *a: commands.append(a))
+    monkeypatch.setattr(transport.renderer, "frame", frames.append)
+    def no_upload(*args, **kwargs):
+        pytest.fail("Static frames must not touch the Android media directory")
+    monkeypatch.setattr(transport, "_adb", no_upload)
+    for content in (b"one", b"two", b"three", b"three"):
+        transport.display(content, "jpg", 70)
+    assert frames == [b"one", b"two", b"three"]
+    assert commands == [("brightness", {"value": 70})]
+    transport.settings(0)
+    transport.display(b"three", "jpg", 70)
+    assert frames == [b"one", b"two", b"three"]
+    assert commands[-2:] == [("brightness", {"value": 0}), ("brightness", {"value": 70})]
+    transport._release()
+    transport.display(b"three", "jpg", 70)
+    assert frames[-2:] == [b"three", b"three"]  # reconnect redraws the saved frame

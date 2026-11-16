@@ -3,6 +3,7 @@
 ## Структура
 
 - `src/lianli_lcd/` — discovery, LCD/RGB transport, gRPC, telemetry и Codex exporter.
+- `android/tryx/FrameServer.java` — собственный Android-рендерер TRYX (без APK).
 - `proto/`, `src/coolercontrol/` — protobuf CoolerControl и сгенерированный Python.
 - `patches/` — полный патч CoolerControl 4.3.1, включая Rust, UI и тесты.
 - `scripts/`, `packaging/` — сборка, установка, удаление и манифест.
@@ -53,6 +54,11 @@ cargo test --locked --release -p coolercontrold main_loop::tests
 ```bash
 bash scripts/prepare-wheels.sh
 ```
+
+Для сборки нужен JDK 17+ и curl: `prepare-wheels.sh` сначала собирает DEX
+через `build-tryx-renderer.sh` (R8 8.5.35 с проверкой SHA-256). Для разработки
+рендерера можно запускать этот шаг отдельно. Созданный DEX включается в wheel,
+но исключён из Git; Android APK и исходники производителя не распространяются.
 
 Wheels собираются системным Python целевой Ubuntu. `build/`, `dist/` и
 `artifacts/` исключены из Git. Бинарники для распространения следует

@@ -63,7 +63,7 @@ def decode_response(frame):
 
 def screen_config(filename):
     return {"Type": "Custom", "id": "Customization", "screenMode": "Full Screen",
-            "ratio": "2:1", "playMode": "Single", "media": [filename],
+            "ratio": "2:1", "playMode": "single", "media": [filename],
             "settings": {"position": "Top", "color": "#FFFFFF", "align": "Center",
                          "badges": [], "filter": {"value": "", "opacity": 0}},
             "sysinfoDisplay": []}

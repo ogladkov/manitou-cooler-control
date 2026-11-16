@@ -23,3 +23,6 @@ htmlcov/
 .agents/
 .codex/
 .bb/
+
+# Generated Android frame renderer (built from android/tryx/FrameServer.java)
+src/lianli_lcd/data/*.dex

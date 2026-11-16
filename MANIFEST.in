@@ -1,1 +1,3 @@
 recursive-include tests/vendor/tinyuz *.c *.h LICENSE
+include android/tryx/FrameServer.java
+include scripts/build-tryx-renderer.sh

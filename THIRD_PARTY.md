@@ -63,3 +63,10 @@ redistribute the binary without providing corresponding GPL source and notices.
 .venv/bin/python -m grpc_tools.protoc -I proto --python_out=src --grpc_python_out=src \
   $(find proto -name '*.proto' | sort)
 ```
+
+The TRYX frame renderer (`android/tryx/FrameServer.java`) is original code under
+this project's GPL-3.0-or-later license. It uses Android's platform graphics APIs
+through reflection. No TRYX APK, firmware or vendor code is distributed.
+The build downloads Google's Apache-2.0 licensed R8/D8 **8.5.35**, verified by
+SHA-256 in `scripts/build-tryx-renderer.sh`; the compiler is not bundled in wheels.
+Compiler documentation: <https://r8.googlesource.com/r8/+/refs/heads/main/README.md>.
