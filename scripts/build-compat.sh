@@ -25,7 +25,7 @@ fi
     cd "$source_dir/coolercontrol-ui"
     npm ci --ignore-scripts
     npm run type-check
-    npx vitest run src/components/__tests__/SensorStylePicker.spec.ts src/components/__tests__/GraphThresholdEditor.spec.ts src/components/__tests__/PanoramaLayoutPicker.spec.ts src/utils/__tests__/lcdSensors.spec.ts
+    npx vitest run src/components/__tests__/SensorStylePicker.spec.ts src/components/__tests__/GraphThresholdEditor.spec.ts src/components/__tests__/PanoramaLayoutPicker.spec.ts src/components/__tests__/PanoramaGridEditor.spec.ts src/utils/__tests__/lcdSensors.spec.ts
     npm run build-only -- --outDir ../coolercontrold/daemon/resources/app
 )
 if ! command -v protoc >/dev/null; then
