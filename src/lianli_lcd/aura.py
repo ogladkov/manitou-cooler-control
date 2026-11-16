@@ -2,7 +2,8 @@
 
 Protocol adapted from OpenRGB's AsusAuraUSBController / AsusAuraMainboardController,
 Copyright Martin Hartl and OpenRGB contributors, GPL-2.0-or-later.
-See THIRD_PARTY.md. No global reset, Gen1 override or persistent commit is sent.
+See THIRD_PARTY.md. Gen1 is enabled only when applying lighting, never on discovery.
+No reset or persistent commit is sent.
 """
 
 from dataclasses import dataclass
@@ -150,4 +151,10 @@ class AuraDevice:
     def packets(self, channel, setting):
         if channel not in self.channels:
             raise ValueError("Unknown ASUS Aura ARGB header")
-        return self.layout.effects(int(channel.removeprefix("argb-")) - 1, setting)
+        effects = self.layout.effects(int(channel.removeprefix("argb-")) - 1, setting)
+        # OpenRGB's SetGen1: without this, a controller left in Gen2 can
+        # accept HID writes while ignoring legacy per-header effects.
+        # This mode switch is controller-wide; effect/color addressing is not.
+        gen1 = packet(0x52)
+        gen1[2:5] = (0x53, 0x00, 0x01)
+        return [bytes(gen1), *effects]

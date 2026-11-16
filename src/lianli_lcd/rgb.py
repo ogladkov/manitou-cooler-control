@@ -89,6 +89,9 @@ class Lighting:
                     with self.transport.open(endpoint) as hid:
                         device = AuraDevice(endpoint, hid.layout())
                     self.devices[device.id] = device
+                    logging.info("ASUS Aura %s: firmware=%s, ARGB headers=%d, onboard slots=%d",
+                                 endpoint.topology, device.layout.firmware,
+                                 device.layout.headers, device.layout.onboard_leds)
                 except Exception as exc:
                     self._discovery_error(f"ASUS Aura {endpoint.topology}: {exc}")
                 continue

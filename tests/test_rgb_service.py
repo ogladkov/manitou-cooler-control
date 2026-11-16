@@ -91,10 +91,10 @@ def test_aura_native_lighting_modes_and_reset(running):
             stub.Lighting(light.LightingRequest(
                 device_id=aura.id, channel_id=channel, setting=light.LightingSetting(
                     mode=mode.name, colors=[light.RGB(r=120)] * mode.min_colors)))
-            assert len(lighting.last_packets[(aura.id, channel)]) == 2
+            assert len(lighting.last_packets[(aura.id, channel)]) == 3
         stub.ResetChannel(reset_channel_pb2.ResetChannelRequest(
             device_id=aura.id, channel_id=channel))
-        assert lighting.last_packets[(aura.id, channel)][0][5] == 0
+        assert lighting.last_packets[(aura.id, channel)][1][5] == 0
     assert not stub.Status(status_pb2.StatusRequest(device_id=aura.id)).status
 
 

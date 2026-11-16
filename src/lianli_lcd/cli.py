@@ -95,6 +95,8 @@ def main():
     elif args.command == "list":
         print(json.dumps([screen.as_dict() for screen in discover()], indent=2))
     elif args.command in ("probe-rgb", "probe-aura"):
+        from dataclasses import asdict
+        from .aura import AuraDevice
         lighting = Lighting()
         if args.command == "probe-aura":
             from .rgb_transport import discover_rgb
@@ -102,7 +104,8 @@ def main():
         else:
             lighting.discover()
         print(json.dumps({"devices": [
-            {"id": d.id, "name": d.name, "channels": d.channels}
+            {"id": d.id, "name": d.name, "channels": d.channels,
+             **({"layout": asdict(d.layout)} if isinstance(d, AuraDevice) else {})}
             for d in lighting.devices.values()], "errors": lighting.discovery_errors}, indent=2))
         if lighting.discovery_errors:
             raise SystemExit(1)

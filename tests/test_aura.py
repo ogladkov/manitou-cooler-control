@@ -94,7 +94,8 @@ def test_discovery_and_status_do_not_set_effects_and_layout_rechecked():
     assert lighting.status(device) == []
     assert transport.writes == []
     lighting.apply(device, "argb-3", LightingSetting(mode="rainbow"))
-    assert [p[1] for p in transport.writes] == [0x35, 0x36]
+    assert [p[1] for p in transport.writes] == [0x52, 0x35, 0x36]
+    assert transport.writes[0] == b"\xec\x52\x53\x00\x01" + bytes(60)
     transport.writes.clear()
     transport.current = replace(transport.current, headers=2)
     with pytest.raises(OSError, match="layout changed"):
@@ -103,6 +104,38 @@ def test_discovery_and_status_do_not_set_effects_and_layout_rechecked():
     transport.current = device.layout
     lighting.apply(device, "argb-3", LightingSetting(mode="off"))
     assert device.error is None
+
+
+def test_gen2_controller_is_enabled_before_effect_on_each_apply():
+    lighting, transport, device = discovered()
+    gen1 = False
+    applied = []
+    def write(data):
+        nonlocal gen1
+        if data == b"\xec\x52\x53\x00\x01" + bytes(60):
+            gen1 = True
+        elif data[1] in (0x35, 0x36):
+            assert gen1, "Legacy effects are ignored while the controller is in Gen2"
+            applied.append(data)
+        else:
+            pytest.fail("unexpected command")
+    transport.write = write
+    for channel in ("argb-1", "argb-2"):
+        gen1 = False  # Also handles mode changes after suspend/resume.
+        lighting.apply(device, channel, LightingSetting(mode="static", colors=[RGB(r=255)]))
+    assert [data[2] for data in applied if data[1] == 0x35] == [0, 1]
+
+
+def test_failed_gen1_write_does_not_send_effect():
+    lighting, transport, device = discovered()
+    def fail(data):
+        transport.writes.append(data)
+        raise OSError("short write")
+    transport.write = fail
+    with pytest.raises(OSError, match="short write"):
+        lighting.apply(device, "argb-1", LightingSetting(mode="off"))
+    assert [data[1] for data in transport.writes] == [0x52]
+    assert device.error == "short write"
 
 
 @pytest.mark.parametrize("channel,setting", [
