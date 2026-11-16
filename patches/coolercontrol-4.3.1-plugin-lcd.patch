@@ -52,16 +52,53 @@ index 0000000..7a3bebe
 +            :disabled="rows.length >= 8" @click="add" />
 +    </fieldset>
 +</template>
+diff --git a/coolercontrol-ui/src/components/PanoramaLayoutPicker.vue b/coolercontrol-ui/src/components/PanoramaLayoutPicker.vue
+new file mode 100644
+index 0000000..45975f8
+--- /dev/null
++++ b/coolercontrol-ui/src/components/PanoramaLayoutPicker.vue
+@@ -0,0 +1,29 @@
++<script setup lang="ts">
++import { useI18n } from 'vue-i18n'
++const { t } = useI18n()
++defineProps<{ modelValue: boolean; leftStyle: string; rightStyle: string }>()
++const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
++</script>
++
++<template>
++    <fieldset class="mb-6">
++        <legend class="mb-3 text-text-color-secondary">{{ t('views.lcd.panoramaLayout') }}</legend>
++        <div class="flex gap-2 mb-3">
++            <button v-for="split in [false, true]" :key="String(split)" type="button"
++                :aria-pressed="modelValue === split"
++                class="flex-1 rounded-lg border-2 p-3"
++                :class="modelValue === split ? 'border-cyan-400 bg-bg-two' : 'border-border-one'"
++                @click="emit('update:modelValue', split)">
++                {{ t(split ? 'views.lcd.panoramaSplit' : 'views.lcd.panoramaWide') }}
++            </button>
++        </div>
++        <div class="flex bg-black overflow-hidden rounded-lg border border-border-one"
++             style="aspect-ratio: 2240 / 1080" role="img" :aria-label="t('views.lcd.panoramaLayout')">
++            <img :src="`/lcd-styles/${leftStyle}${modelValue ? '_panel' : ''}.png`" alt=""
++                 :class="modelValue ? 'w-1/2' : 'w-full'" class="object-contain" />
++            <img v-if="modelValue" :src="`/lcd-styles/${rightStyle}_panel.png`" alt=""
++                 class="w-1/2 object-contain border-l border-border-one" />
++        </div>
++        <p class="mt-2 text-sm text-text-color-secondary">{{ t(modelValue ? 'views.lcd.panoramaSplitHint' : 'views.lcd.panoramaWideHint') }}</p>
++    </fieldset>
++</template>
 diff --git a/coolercontrol-ui/src/components/SensorStylePicker.vue b/coolercontrol-ui/src/components/SensorStylePicker.vue
 new file mode 100644
-index 0000000..891fe82
+index 0000000..52a764b
 --- /dev/null
 +++ b/coolercontrol-ui/src/components/SensorStylePicker.vue
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,46 @@
 +<script setup lang="ts">
-+defineProps<{ modelValue: string; title: string }>()
++import { computed } from 'vue'
++import { panoramaStyles } from '@/utils/panorama'
++const props = defineProps<{ modelValue: string; title: string; panorama?: boolean; split?: boolean }>()
 +const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
-+const styles = [
++const fanStyles = [
 +    { id: 'classic', label: 'CoolerControl' },
 +    { id: 'digital', label: 'Digital' },
 +    { id: 'ring', label: 'Ring' },
@@ -78,6 +115,7 @@ index 0000000..891fe82
 +    { id: 'mono_reserve', label: 'Mono Reserve' },
 +    { id: 'mono_reverse', label: 'Mono Reverse' },
 +]
++const styles = computed(() => props.panorama ? panoramaStyles : fanStyles)
 +</script>
 +
 +<template>
@@ -93,8 +131,9 @@ index 0000000..891fe82
 +                :class="modelValue === style.id ? 'border-cyan-400 bg-bg-two' : 'border-border-one hover:border-cyan-600'"
 +                @click="emit('update:modelValue', style.id)"
 +            >
-+                <img :src="`/lcd-styles/${style.id}.png`" alt="" width="160" height="160"
-+                     class="aspect-square w-full rounded-md object-contain bg-black" />
++                <img :src="`/lcd-styles/${style.id}${panorama && split ? '_panel' : ''}.png`" alt="" width="160" :height="panorama && !split ? 77 : 160"
++                     class="w-full rounded-md object-contain bg-black"
++                     :style="{ aspectRatio: panorama ? (split ? '1120 / 1080' : '2240 / 1080') : '1' }" />
 +                <span class="mt-2 block text-sm">{{ style.label }}</span>
 +            </button>
 +        </div>
@@ -150,6 +189,50 @@ index 0000000..70e72e3
 +        ]) expect(graphThresholdsValid(rows as any)).toBe(false)
 +    })
 +})
+diff --git a/coolercontrol-ui/src/components/__tests__/PanoramaLayoutPicker.spec.ts b/coolercontrol-ui/src/components/__tests__/PanoramaLayoutPicker.spec.ts
+new file mode 100644
+index 0000000..36510c9
+--- /dev/null
++++ b/coolercontrol-ui/src/components/__tests__/PanoramaLayoutPicker.spec.ts
+@@ -0,0 +1,38 @@
++import { describe, it, expect, vi } from 'vitest'
++import { mount } from '@vue/test-utils'
++import PanoramaLayoutPicker from '../PanoramaLayoutPicker.vue'
++import SensorStylePicker from '../SensorStylePicker.vue'
++import { isPanoramaDisplay, panoramaStyle } from '@/utils/panorama'
++vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
++describe('TRYX native landscape layouts', () => {
++    it('identifies TRYX and migrates old square styles', () => {
++        expect(isPanoramaDisplay('TRYX PANORAMA 360', 2240, 1080)).toBe(true)
++        expect(isPanoramaDisplay('Lian Li UNI TL LCD', 400, 400)).toBe(false)
++        expect(isPanoramaDisplay('Other wide LCD', 2240, 1080)).toBe(false)
++        expect(panoramaStyle('mono_trace')).toBe('panorama_trace')
++        expect(panoramaStyle('mono_reverse')).toBe('panorama_scope')
++        expect(panoramaStyle(undefined)).toBe('panorama_minimal')
++    })
++    it('offers only native TRYX styles, with independent selection and landscape previews', async () => {
++        const left = mount(SensorStylePicker, { props: { modelValue: 'panorama_trace', title: 'Left', panorama: true } })
++        const right = mount(SensorStylePicker, { props: { modelValue: 'panorama_minimal', title: 'Right', panorama: true, split: true } })
++        expect(left.findAll('button')).toHaveLength(3)
++        expect(left.text()).not.toContain('Mono')
++        expect(left.find('img').attributes('style')).toContain('2240 / 1080')
++        expect(right.find('img').attributes('src')).toContain('_panel.png')
++        await left.findAll('button')[1].trigger('click')
++        expect(left.emitted('update:modelValue')).toEqual([['panorama_scope']])
++        expect(right.emitted('update:modelValue')).toBeUndefined()
++        expect(right.findAll('button')[0].attributes('aria-pressed')).toBe('true')
++    })
++    it('switches between one canvas and two independently styled halves', async () => {
++        const wrapper = mount(PanoramaLayoutPicker, { props: { modelValue: false, leftStyle: 'panorama_trace', rightStyle: 'panorama_scope' } })
++        expect(wrapper.findAll('img')).toHaveLength(1)
++        await wrapper.findAll('button')[1].trigger('click')
++        expect(wrapper.emitted('update:modelValue')).toEqual([[true]])
++        await wrapper.setProps({ modelValue: true })
++        expect(wrapper.findAll('img').map(i => i.attributes('src'))).toEqual(['/lcd-styles/panorama_trace_panel.png', '/lcd-styles/panorama_scope_panel.png'])
++        await wrapper.findAll('button')[0].trigger('click')
++        expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
++    })
++})
 diff --git a/coolercontrol-ui/src/components/__tests__/SensorStylePicker.spec.ts b/coolercontrol-ui/src/components/__tests__/SensorStylePicker.spec.ts
 new file mode 100644
 index 0000000..c8161c8
@@ -175,10 +258,10 @@ index 0000000..c8161c8
 +    })
 +})
 diff --git a/coolercontrol-ui/src/i18n/locales/en.ts b/coolercontrol-ui/src/i18n/locales/en.ts
-index d74ff2a..f49135a 100644
+index d74ff2a..bd06ce8 100644
 --- a/coolercontrol-ui/src/i18n/locales/en.ts
 +++ b/coolercontrol-ui/src/i18n/locales/en.ts
-@@ -852,6 +852,14 @@ export default {
+@@ -852,6 +852,22 @@ export default {
              numberOfColorsTooltip: 'Number of Colors to use for the chosen Lighting Mode.',
          },
          lcd: {
@@ -189,11 +272,19 @@ index d74ff2a..f49135a 100644
 +      graphRemove: 'Remove threshold',
 +      graphAdd: 'Add threshold',
 +      graphInvalid: 'Enter unique numeric values and valid colors (up to 8 thresholds).',
++      panoramaLayout: 'TRYX screen layout',
++      panoramaWide: 'Full width',
++      panoramaSplit: 'Two panels',
++      panoramaWideHint: 'One horizontal canvas · 2240 × 1080',
++      panoramaSplitHint: 'Two independent 1120 × 1080 panels. The center boundary follows the screen bend.',
++      panoramaLeft: 'Left panel',
++      panoramaRight: 'Right panel',
++      panoramaSourceRequired: 'Choose a sensor for each active panel.',
 +      sensorStyle: 'Sensor style',
              saveLcdSettings: 'Save LCD Settings',
              lcdMode: 'LCD Mode',
              brightness: 'Brightness',
-@@ -860,8 +868,8 @@ export default {
+@@ -860,8 +876,8 @@ export default {
              orientationDegrees: 'Orientation in degrees',
              chooseImage: 'Choose Image',
              dragAndDrop: 'Drag and drop files to here.',
@@ -205,10 +296,10 @@ index d74ff2a..f49135a 100644
              imagesPathTooltip:
                  'Enter the absolute path to the directory containing images.\nThe directory must contain at least one image file, and they\nmay be static images or gifs. The Carousel will cycle\nthrough them with the selected delay. All files are processed\nupon submission to ensure maximum compatibility.',
 diff --git a/coolercontrol-ui/src/i18n/locales/ru.ts b/coolercontrol-ui/src/i18n/locales/ru.ts
-index 1ced93a..faee71d 100644
+index 1ced93a..b018c92 100644
 --- a/coolercontrol-ui/src/i18n/locales/ru.ts
 +++ b/coolercontrol-ui/src/i18n/locales/ru.ts
-@@ -861,6 +861,14 @@ export default {
+@@ -861,6 +861,22 @@ export default {
                  'Количество цветов для использования в выбранном режиме подсветки.',
          },
          lcd: {
@@ -219,11 +310,19 @@ index 1ced93a..faee71d 100644
 +      graphRemove: 'Удалить порог',
 +      graphAdd: 'Добавить порог',
 +      graphInvalid: 'Задайте уникальные числовые значения и корректные цвета (не более 8 порогов).',
++      panoramaLayout: 'Формат экрана TRYX',
++      panoramaWide: 'Цельный экран',
++      panoramaSplit: 'Две половины',
++      panoramaWideHint: 'Горизонтальный холст · 2240 × 1080',
++      panoramaSplitHint: 'Две независимые зоны 1120 × 1080. Граница по центру соответствует сгибу экрана.',
++      panoramaLeft: 'Левая половина',
++      panoramaRight: 'Правая половина',
++      panoramaSourceRequired: 'Выберите показатель для каждой активной зоны.',
 +      sensorStyle: 'Стиль датчика',
              saveLcdSettings: 'Сохранить настройки LCD',
              lcdMode: 'Режим LCD',
              brightness: 'Яркость',
-@@ -869,8 +877,8 @@ export default {
+@@ -869,8 +885,8 @@ export default {
              orientationDegrees: 'Ориентация в градусах',
              chooseImage: 'Выбрать изображение',
              dragAndDrop: 'Перетащите файлы сюда.',
@@ -235,13 +334,21 @@ index 1ced93a..faee71d 100644
              imagesPathTooltip:
                  'Введите абсолютный путь к каталогу, содержащему изображения.\nКаталог должен содержать хотя бы один файл изображения, и они\nмогут быть статическими изображениями или gif-файлами. Карусель будет циклически\nпереключать их с выбранной задержкой. Все файлы обрабатываются\nпри отправке для обеспечения максимальной совместимости.',
 diff --git a/coolercontrol-ui/src/models/DaemonSettings.ts b/coolercontrol-ui/src/models/DaemonSettings.ts
-index 52cdce5..fa3914b 100644
+index 52cdce5..19dd23e 100644
 --- a/coolercontrol-ui/src/models/DaemonSettings.ts
 +++ b/coolercontrol-ui/src/models/DaemonSettings.ts
-@@ -92,6 +92,9 @@ export class LcdCarouselSettings {
+@@ -91,7 +91,17 @@ export class LcdCarouselSettings {
+     }
  }
  
++export interface LcdPanelSettings {
++    temp_source: TempSource
++    sensor_style: string
++    graph_thresholds: Array<{ value: number; color: [number, number, number] }>
++}
++
  export class LcdSettings {
++    right_panel?: LcdPanelSettings
 +    sensor_style?: string
 +    graph_thresholds?: Array<{ value: number; color: [number, number, number] }>
 +
@@ -336,22 +443,47 @@ index 0000000..14527ba
 +    }
 +    return sensors
 +}
+diff --git a/coolercontrol-ui/src/utils/panorama.ts b/coolercontrol-ui/src/utils/panorama.ts
+new file mode 100644
+index 0000000..a1472e6
+--- /dev/null
++++ b/coolercontrol-ui/src/utils/panorama.ts
+@@ -0,0 +1,17 @@
++export const panoramaStyles = [
++    { id: 'panorama_minimal', label: 'Panorama Minimal' },
++    { id: 'panorama_scope', label: 'Panorama Scope' },
++    { id: 'panorama_trace', label: 'Panorama Trace' },
++]
++
++export function isPanoramaDisplay(model: string | undefined, width: number, height: number): boolean {
++    return !!model?.startsWith('TRYX PANORAMA') && width === 2240 && height === 1080
++}
++
++export function panoramaStyle(style: string | undefined): string {
++    if (style === 'mono_trace' || style === 'panorama_trace') return 'panorama_trace'
++    if (['trend', 'mono_graph', 'mono_signal', 'mono_reverse', 'panorama_scope'].includes(style ?? '')) {
++        return 'panorama_scope'
++    }
++    return 'panorama_minimal'
++}
 diff --git a/coolercontrol-ui/src/views/LcdView.vue b/coolercontrol-ui/src/views/LcdView.vue
-index dbf4e04..88aa2c8 100644
+index dbf4e04..25f9953 100644
 --- a/coolercontrol-ui/src/views/LcdView.vue
 +++ b/coolercontrol-ui/src/views/LcdView.vue
-@@ -58,6 +58,10 @@ import Listbox, { ListboxChangeEvent } from 'primevue/listbox'
+@@ -58,6 +58,12 @@ import Listbox, { ListboxChangeEvent } from 'primevue/listbox'
  import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
  import { useConfirm } from 'primevue/useconfirm'
  import InputText from 'primevue/inputtext'
 +import SensorStylePicker from '@/components/SensorStylePicker.vue'
++import PanoramaLayoutPicker from '@/components/PanoramaLayoutPicker.vue'
++import { isPanoramaDisplay, panoramaStyle } from '@/utils/panorama'
 +import GraphThresholdEditor from '@/components/GraphThresholdEditor.vue'
 +import { graphThresholdsValid, type GraphThresholdDraft } from '@/utils/graphThresholds'
 +import { lcdSensors } from '@/utils/lcdSensors'
  import { ElLoading } from 'element-plus'
  import { svgLoader, svgLoaderViewBox } from '@/models/Loader.ts'
  import { useI18n } from 'vue-i18n'
-@@ -79,6 +83,7 @@ interface AvailableTemp {
+@@ -79,6 +85,7 @@ interface AvailableTemp {
      tempFrontendName: string
      lineColor: string
      temp: string
@@ -359,7 +491,25 @@ index dbf4e04..88aa2c8 100644
  }
  
  interface AvailableTempSources {
-@@ -119,7 +124,7 @@ for (const device of deviceStore.allDevices()) {
+@@ -100,6 +107,8 @@ const channelLabel = ref(
+         ?.name ?? props.channelName,
+ )
+ const contextIsDirty: Ref<boolean> = ref(false)
++let isPanorama = false
++let imageHeight: number = 320
+ let imageWidth: number = 320
+ let imageSizeMaxBytes: number = 10_000_000
+ for (const device of deviceStore.allDevices()) {
+@@ -107,6 +116,8 @@ for (const device of deviceStore.allDevices()) {
+         const channelInfo = device.info.channels.get(props.channelName)
+         if (channelInfo != null && channelInfo.lcd_info != null) {
+             imageWidth = channelInfo.lcd_info.screen_width
++            imageHeight = channelInfo.lcd_info.screen_height
++            isPanorama = isPanoramaDisplay(device.info.model, imageWidth, imageHeight)
+             imageSizeMaxBytes = channelInfo.lcd_info.max_image_size_bytes * 2 // we double it so that processing can reduce it further
+         }
+     }
+@@ -119,7 +130,7 @@ for (const device of deviceStore.allDevices()) {
          continue
      }
      for (const mode of device.info?.channels.get(props.channelName)?.lcd_modes ?? []) {
@@ -368,7 +518,7 @@ index dbf4e04..88aa2c8 100644
      }
  }
  
-@@ -127,7 +132,7 @@ const tempSources: Ref<Array<AvailableTempSources>> = ref([])
+@@ -127,7 +138,7 @@ const tempSources: Ref<Array<AvailableTempSources>> = ref([])
  const fillTempSources = () => {
      tempSources.value.length = 0
      for (const device of deviceStore.allDevices()) {
@@ -377,7 +527,7 @@ index dbf4e04..88aa2c8 100644
              continue
          }
          const deviceSettings = settingsStore.allUIDeviceSettings.get(device.uid)!
-@@ -136,13 +141,14 @@ const fillTempSources = () => {
+@@ -136,13 +147,14 @@ const fillTempSources = () => {
              deviceName: deviceSettings.name,
              temps: [],
          }
@@ -397,22 +547,47 @@ index dbf4e04..88aa2c8 100644
              })
          }
          if (deviceSource.temps.length === 0) {
-@@ -186,6 +192,10 @@ if (startingDeviceSetting?.lcd != null) {
+@@ -186,6 +198,20 @@ if (startingDeviceSetting?.lcd != null) {
      }
  }
  
-+const selectedSensorStyle = ref(startingDeviceSetting?.lcd?.sensor_style ?? 'classic')
++const selectedSensorStyle = ref(isPanorama ? panoramaStyle(startingDeviceSetting?.lcd?.sensor_style)
++    : startingDeviceSetting?.lcd?.sensor_style ?? 'classic')
++const splitPanorama = ref(isPanorama && startingDeviceSetting?.lcd?.right_panel != null)
++const rightSensorStyle = ref(panoramaStyle(startingDeviceSetting?.lcd?.right_panel?.sensor_style))
++const savedRightSource = startingDeviceSetting?.lcd?.right_panel?.temp_source
++const rightTemp = ref<AvailableTemp | undefined>(tempSources.value.flatMap(device => device.temps).find(
++    source => source.deviceUID === savedRightSource?.device_uid && source.tempName === savedRightSource?.temp_name,
++))
++const rightGraphThresholds = ref<GraphThresholdDraft[]>(
++    (startingDeviceSetting?.lcd?.right_panel?.graph_thresholds ?? []).map(row => ({ ...row, color: [...row.color] })),
++)
 +const graphThresholds = ref<GraphThresholdDraft[]>(
 +    (startingDeviceSetting?.lcd?.graph_thresholds ?? []).map(row => ({ ...row, color: [...row.color] })),
 +)
  const selectedLcdMode: Ref<LcdMode> = ref(startingLcdMode)
  const selectedBrightness: Ref<number> = ref(startingBrightness)
  const selectedOrientation: Ref<number> = ref(startingOrientation)
-@@ -272,12 +282,20 @@ const saveLCDSetting = async () => {
+@@ -272,12 +298,35 @@ const saveLCDSetting = async () => {
          return
      }
      const setting = new DeviceSettingWriteLcdDTO(selectedLcdMode.value.name)
 +    if (setting.mode === 'temp') {
++        if (chosenTemp.value == null || (isPanorama && splitPanorama.value && rightTemp.value == null)) {
++            toast.add({ severity: 'error', summary: t('common.error'), detail: t('views.lcd.panoramaSourceRequired'), life: 6000 })
++            return
++        }
++        if (isPanorama && splitPanorama.value) {
++            if (!graphThresholdsValid(rightGraphThresholds.value)) {
++                toast.add({ severity: 'error', summary: t('common.error'), detail: t('views.lcd.graphInvalid'), life: 6000 })
++                return
++            }
++            setting.right_panel = {
++                temp_source: new TempSource(rightTemp.value!.deviceUID, rightTemp.value!.tempName),
++                sensor_style: rightSensorStyle.value,
++                graph_thresholds: rightGraphThresholds.value.map(row => ({ value: row.value!, color: [...row.color] })),
++            }
++        }
 +        if (!graphThresholdsValid(graphThresholds.value)) {
 +            toast.add({ severity: 'error', summary: t('common.error'), detail: t('views.lcd.graphInvalid'), life: 6000 })
 +            return
@@ -429,7 +604,7 @@ index dbf4e04..88aa2c8 100644
      if (setting.mode === 'temp' && chosenTemp.value != null) {
          setting.temp_source = new TempSource(chosenTemp.value.deviceUID, chosenTemp.value.tempName)
      }
-@@ -338,12 +356,12 @@ const saveNameFunction = async (newName: string): Promise<boolean> => {
+@@ -338,12 +387,12 @@ const saveNameFunction = async (newName: string): Promise<boolean> => {
  }
  
  const updateTemps = () => {
@@ -446,31 +621,77 @@ index dbf4e04..88aa2c8 100644
          }
      }
  }
-@@ -456,6 +474,8 @@ onMounted(async () => {
+@@ -456,6 +505,12 @@ onMounted(async () => {
              selectedLcdMode,
              selectedBrightness,
              selectedOrientation,
 +            selectedSensorStyle,
++            splitPanorama,
++            rightTemp,
++            rightSensorStyle,
++            rightGraphThresholds,
 +            graphThresholds,
              chosenTemp,
              imagesPath,
              imagesDelayInterval,
-@@ -643,6 +663,9 @@ onUnmounted(() => {
+@@ -503,7 +558,7 @@ onUnmounted(() => {
+     </div>
+     <ScrollAreaRoot id="lcd-control-pane" style="--scrollbar-size: 10px">
+         <ScrollAreaViewport class="p-4 pb-16 h-screen w-full">
+-            <div class="w-full flex flex-col lg:flex-row">
++            <div class="w-full flex flex-col lg:flex-row lg:flex-wrap gap-y-6">
+                 <div id="left-side">
+                     <div class="mt-0 mr-4 w-96">
+                         <small class="ml-3 font-light text-sm text-text-color-secondary">
+@@ -616,7 +671,8 @@ onUnmounted(() => {
+                 <div
+                     id="right-side"
+                     v-if="selectedLcdMode.image"
+-                    class="flex flex-col lg:flex-row mt-4 ml-1 w-96 h-96 min-w-96 min-h-96"
++                    class="flex flex-col lg:flex-row mt-4 ml-1 w-96 min-w-96"
++                    :style="{ aspectRatio: `${imageWidth} / ${imageHeight}` }"
+                 >
+                     <div class="flex w-full mr-0">
+                         <img
+@@ -643,6 +699,13 @@ onUnmounted(() => {
                      "
                      class="mt-0 mr-4 w-96"
                  >
-+                    <SensorStylePicker v-model="selectedSensorStyle" :title="t('views.lcd.sensorStyle')" />
-+                    <GraphThresholdEditor v-if="selectedSensorStyle === 'mono_trace'"
++                    <PanoramaLayoutPicker v-if="isPanorama" v-model="splitPanorama"
++                        :left-style="selectedSensorStyle" :right-style="rightSensorStyle" />
++                    <h3 v-if="isPanorama && splitPanorama" class="mb-4">{{ t('views.lcd.panoramaLeft') }}</h3>
++                    <SensorStylePicker v-model="selectedSensorStyle" :title="t('views.lcd.sensorStyle')"
++                        :panorama="isPanorama" :split="splitPanorama" />
++                    <GraphThresholdEditor v-if="isPanorama || selectedSensorStyle === 'mono_trace'"
 +                        v-model="graphThresholds" :unit="chosenTemp?.unit ?? '°C'" />
                      <small class="ml-3 font-light text-sm text-text-color-secondary">
                          {{ t('views.lcd.tempSource') }}
                      </small>
-@@ -680,7 +703,7 @@ onUnmounted(() => {
+@@ -680,7 +743,26 @@ onUnmounted(() => {
                                          :style="{ color: slotProps.option.lineColor }"
                                      />{{ slotProps.option.tempFrontendName }}
                                  </div>
 -                                <div>{{ slotProps.option.temp }} {{ t('common.tempUnit') }}</div>
 +                                <div>{{ slotProps.option.temp }} {{ slotProps.option.unit }}</div>
++                            </div>
++                        </template>
++                    </Listbox>
++                </div>
++                <div v-if="isPanorama && splitPanorama && selectedLcdMode.name === 'temp'"
++                     class="mt-0 mr-4 w-96">
++                    <h3 class="mb-4">{{ t('views.lcd.panoramaRight') }}</h3>
++                    <SensorStylePicker v-model="rightSensorStyle" :title="t('views.lcd.sensorStyle')"
++                        panorama split />
++                    <GraphThresholdEditor v-model="rightGraphThresholds" :unit="rightTemp?.unit ?? '°C'" />
++                    <small class="ml-3 font-light text-sm text-text-color-secondary">{{ t('views.lcd.tempSource') }}</small>
++                    <Listbox v-model="rightTemp" :options="tempSources" filter checkmark
++                        option-label="tempFrontendName" option-group-label="deviceName"
++                        option-group-children="temps" filter-placeholder="Search"
++                        class="w-full" list-style="max-height: 100%" :invalid="rightTemp == null">
++                        <template #option="slotProps">
++                            <div class="flex items-center w-full justify-between">
++                                <span>{{ slotProps.option.tempFrontendName }}</span>
++                                <span>{{ slotProps.option.temp }} {{ slotProps.option.unit }}</span>
                              </div>
                          </template>
                      </Listbox>
@@ -524,20 +745,37 @@ index 0000000..a08c09f
 +}
 diff --git a/coolercontrold/cc-image/examples/sensor_style_previews.rs b/coolercontrold/cc-image/examples/sensor_style_previews.rs
 new file mode 100644
-index 0000000..123d638
+index 0000000..d47003c
 --- /dev/null
 +++ b/coolercontrold/cc-image/examples/sensor_style_previews.rs
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,30 @@
 +use cc_image::{LcdImageGenerator, SENSOR_STYLES};
 +
 +fn main() -> anyhow::Result<()> {
 +    let output = std::env::args().nth(1).expect("output directory");
 +    std::fs::create_dir_all(&output)?;
 +    let generator = LcdImageGenerator::new();
-+    let history: Vec<_> = (0..60).map(|i| 48.0 + i as f64 * 0.28 + (i as f64 * 0.3).sin()*7.0).collect();
++    let mut history: Vec<_> = (0..60).map(|i| 48.0 + i as f64 * 0.28 + (i as f64 * 0.3).sin()*7.0).collect();
++    history[59] = 67.4;
++    let mut gpu_history: Vec<_> = (0..60).map(|i| 30.0 + i as f64 * 0.2 + (i as f64 * 0.23).cos()*8.0).collect();
++    gpu_history[59] = 42.8;
 +    for style in SENSOR_STYLES {
 +        let (png, _) = generator.generate_sensor_image(67.4, "CPU PACKAGE", style, &history, None)?;
 +        std::fs::write(std::path::Path::new(&output).join(format!("{style}.png")), png)?;
++    }
++    for style in cc_image::PANORAMA_STYLES {
++        let panel = || cc_image::PanoramaPanel { value: 67.4, label: "CPU LOAD", style,
++            history: &history, unit: cc_image::SensorUnit::Percent, thresholds: &[] };
++        for (suffix, right) in [("", None), ("_split", Some(cc_image::PanoramaPanel {
++            value: 42.8, label: "GPU LOAD", history: &gpu_history, ..panel()
++        }))] {
++            let (png, _) = generator.generate_panorama_image(panel(), right)?;
++            if suffix == "_split" {
++                image::load_from_memory(&png)?.crop_imm(0, 0, 1120, 1080)
++                    .save(std::path::Path::new(&output).join(format!("{style}_panel.png")))?;
++            }
++            std::fs::write(std::path::Path::new(&output).join(format!("{style}{suffix}.png")), png)?;
++        }
 +    }
 +    Ok(())
 +}
@@ -565,7 +803,7 @@ index 0000000..3ec38e5
 +    Ok(())
 +}
 diff --git a/coolercontrold/cc-image/src/lcd.rs b/coolercontrold/cc-image/src/lcd.rs
-index 01c3979..737db3a 100644
+index 01c3979..ec0b424 100644
 --- a/coolercontrold/cc-image/src/lcd.rs
 +++ b/coolercontrold/cc-image/src/lcd.rs
 @@ -47,6 +47,161 @@ pub struct LcdImageGenerator {
@@ -730,7 +968,7 @@ index 01c3979..737db3a 100644
  impl Default for LcdImageGenerator {
      fn default() -> Self {
          Self::new()
-@@ -67,6 +222,41 @@ impl LcdImageGenerator {
+@@ -67,6 +222,50 @@ impl LcdImageGenerator {
          }
      }
  
@@ -769,10 +1007,19 @@ index 01c3979..737db3a 100644
 +        Ok((output.into_inner(), ImageTemplate(image)))
 +    }
 +
++    pub fn generate_panorama_image(&self, left: crate::PanoramaPanel<'_>,
++                                   right: Option<crate::PanoramaPanel<'_>>)
++        -> Result<(Vec<u8>, ImageTemplate)> {
++        let image = crate::sensor_styles::panorama::render(left, right, &self.font_mono, &self.font_variable)?;
++        let mut output = Cursor::new(Vec::new());
++        image.encode(ImageFormat::Png, &mut output).map_err(|e| anyhow!("{e}"))?;
++        Ok((output.into_inner(), ImageTemplate(image)))
++    }
++
      /// Generates a single-temperature gauge image and returns the PNG bytes
      /// along with a reusable template. When an existing `template` is
      /// provided, the expensive gauge-circle generation is skipped and only
-@@ -355,7 +545,7 @@ impl LcdImageGenerator {
+@@ -355,7 +554,7 @@ impl LcdImageGenerator {
          } else if label.starts_with('Δ') {
              "Δ"
          } else {
@@ -781,25 +1028,90 @@ index 01c3979..737db3a 100644
          };
          TextLayout::new()
              .with_align(TextAlign::Center)
+@@ -365,3 +564,63 @@ impl LcdImageGenerator {
+             .draw(image);
+     }
+ }
++
++#[cfg(test)]
++mod lianli_panorama_render_tests {
++    use super::*;
++    use crate::{PanoramaPanel, SensorUnit};
++
++    #[test]
++    fn native_size_wide_trace_uses_both_planes_and_no_square_padding() {
++        let generator = LcdImageGenerator::new();
++        let history = vec![50.0; 60];
++        for style in crate::PANORAMA_STYLES {
++            let (png, _) = generator.generate_panorama_image(PanoramaPanel {
++                value: 50.0, label: "CPU LOAD", style, history: &history,
++                unit: SensorUnit::Percent, thresholds: &[],
++            }, None).unwrap();
++            let image = image::load_from_memory(&png).unwrap().to_rgb8();
++            assert_eq!(image.dimensions(), (2240, 1080));
++            assert!(image.pixels().all(|p| p[0] == p[1] && p[1] == p[2]));
++            if *style == "panorama_trace" {
++                for x in [150, 500, 1120, 1750, 2080] {
++                    assert!(image.get_pixel(x, 540)[0] > 200, "trace does not fill native width at {x}");
++                }
++            }
++        }
++        assert_eq!(crate::panorama_style("mono_trace"), Some("panorama_trace"));
++        assert_eq!(crate::panorama_style("mono_reverse"), Some("panorama_scope"));
++        assert_eq!(crate::panorama_style("bogus"), None);
++    }
++
++    #[test]
++    fn split_panels_keep_independent_data_units_colors_and_fold_gutters() {
++        let generator = LcdImageGenerator::new();
++        let history = [25.0; 60];
++        let rules = [(70.0, (255,0,0))];
++        let render = |value, style| {
++            let (png, _) = generator.generate_panorama_image(PanoramaPanel {
++                value: 25.0, label: "CPU", style: "panorama_scope", history: &history,
++                unit: SensorUnit::Percent, thresholds: &[],
++            }, Some(PanoramaPanel {
++                value, label: "GPU", style, history: &[value; 60],
++                unit: SensorUnit::Percent, thresholds: &rules,
++            })).unwrap();
++            image::load_from_memory(&png).unwrap().to_rgb8()
++        };
++        let low = render(25.0, "panorama_trace");
++        let high = render(90.0, "panorama_trace");
++        let missing = render(f64::NAN, "panorama_trace");
++        for y in 0..1080 {
++            for x in 0..1120 {
++                assert_eq!(low.get_pixel(x,y), high.get_pixel(x,y));
++                assert_eq!(low.get_pixel(x,y), missing.get_pixel(x,y));
++            }
++            for x in 1080..1160 { assert_eq!(high.get_pixel(x,y).0, [0,0,0]); }
++        }
++        assert!(high.enumerate_pixels().any(|(x,_,p)| x > 1120 && p[0] > 200 && p[1] == 0));
++        assert!(missing.enumerate_pixels().filter(|(x,_,_)| *x >= 1120).all(|(_,_,p)| p.0 == [0,0,0]));
++        let different_style = render(25.0, "panorama_minimal");
++        assert_ne!(low, different_style);
++    }
++}
 diff --git a/coolercontrold/cc-image/src/lib.rs b/coolercontrold/cc-image/src/lib.rs
-index 60bcbed..661a31e 100644
+index 60bcbed..e76800b 100644
 --- a/coolercontrold/cc-image/src/lib.rs
 +++ b/coolercontrold/cc-image/src/lib.rs
-@@ -17,6 +17,8 @@
+@@ -17,6 +17,9 @@
   */
  
  mod lcd;
 +mod sensor_styles;
 +pub use sensor_styles::{SENSOR_STYLES, sensor_style_uses_history, SensorUnit};
++pub use sensor_styles::panorama::{PanoramaPanel, PANORAMA_STYLES, panorama_style};
  mod processing;
  
  pub use lcd::{ImageTemplate, LcdImageGenerator, DEFAULT_LCD_SHUTDOWN_IMAGE};
 diff --git a/coolercontrold/cc-image/src/sensor_styles.rs b/coolercontrold/cc-image/src/sensor_styles.rs
 new file mode 100644
-index 0000000..1d18f01
+index 0000000..0c8e0cb
 --- /dev/null
 +++ b/coolercontrold/cc-image/src/sensor_styles.rs
-@@ -0,0 +1,239 @@
+@@ -0,0 +1,240 @@
 +//! Original sensor layouts inspired by instrument displays. GPL-3.0-or-later.
 +use anyhow::{bail, Context, Result};
 +use ril::{Draw, Font, Image, Rgba, TextAlign, TextLayout, TextSegment};
@@ -807,13 +1119,14 @@ index 0000000..1d18f01
 +
 +mod monochrome;
 +mod alien;
++pub mod panorama;
 +
 +pub const SENSOR_STYLES: &[&str] = &["classic", "digital", "ring", "dial", "trend",
 +    "mono_minimal", "mono_dial", "mono_segment", "mono_graph",
 +    "mono_orbit", "mono_relic", "mono_signal", "mono_trace", "mono_reserve", "mono_reverse"];
 +
 +pub fn sensor_style_uses_history(style: &str) -> bool {
-+    matches!(style, "trend" | "mono_graph" | "mono_signal" | "mono_trace" | "mono_reverse")
++    matches!(style, "panorama_scope" | "panorama_trace" | "trend" | "mono_graph" | "mono_signal" | "mono_trace" | "mono_reverse")
 +}
 +
 +/// The highest reached threshold colors the whole trace. Input order is irrelevant.
@@ -1304,39 +1617,167 @@ index 0000000..038598f
 +    }
 +    Ok(image)
 +}
+diff --git a/coolercontrold/cc-image/src/sensor_styles/panorama.rs b/coolercontrold/cc-image/src/sensor_styles/panorama.rs
+new file mode 100644
+index 0000000..953ed94
+--- /dev/null
++++ b/coolercontrold/cc-image/src/sensor_styles/panorama.rs
+@@ -0,0 +1,96 @@
++//! Native panoramic layouts; no square fan artwork is resized or embedded.
++use super::*;
++
++pub const PANORAMA_STYLES: &[&str] = &["panorama_minimal", "panorama_scope", "panorama_trace"];
++
++/// Migrate existing fan layouts on TRYX to a native panoramic equivalent.
++pub fn panorama_style(style: &str) -> Option<&'static str> {
++    match style {
++        "panorama_trace" | "mono_trace" => Some("panorama_trace"),
++        "panorama_scope" | "trend" | "mono_graph" | "mono_signal" | "mono_reverse" => Some("panorama_scope"),
++        "panorama_minimal" => Some("panorama_minimal"),
++        style if SENSOR_STYLES.contains(&style) => Some("panorama_minimal"),
++        _ => None,
++    }
++}
++
++pub struct PanoramaPanel<'a> {
++    pub value: f64,
++    pub label: &'a str,
++    pub style: &'a str,
++    pub history: &'a [f64],
++    pub unit: SensorUnit,
++    pub thresholds: &'a [(f64, (u8, u8, u8))],
++}
++
++fn trace(canvas: &mut Pixmap, panel: &PanoramaPanel<'_>, bounds: (f32, f32, f32, f32)) {
++    let (x, y, width, height) = bounds;
++    if !panel.value.is_finite() { return; }
++    let fallback = [panel.value];
++    let samples = if panel.history.is_empty() { &fallback[..] } else { panel.history };
++    let samples = &samples[samples.len().saturating_sub(60)..];
++    let color = graph_color(panel.value, panel.thresholds);
++    let mut points = Vec::new();
++    for (i, sample) in samples.iter().enumerate() {
++        if !sample.is_finite() {
++            if points.len() > 1 { line(canvas, &points, 5.0, color); }
++            points.clear();
++            continue;
++        }
++        points.push((x + width - (samples.len() - 1 - i) as f32 * width / 59.0,
++                     y + height * (1.0 - panel.unit.ratio(*sample))));
++    }
++    if points.len() > 1 { line(canvas, &points, 5.0, color); }
++    else if let Some(&(x, y)) = points.last() {
++        if let Some(dot) = PathBuilder::from_circle(x, y, 3.0) {
++            canvas.fill_path(&dot, &paint(color), FillRule::Winding, Transform::identity(), None);
++        }
++    }
++}
++
++pub fn render(left: PanoramaPanel<'_>, right: Option<PanoramaPanel<'_>>,
++              mono: &Font, regular: &Font) -> Result<Image<Rgba>> {
++    let split = right.is_some();
++    let width = if split { 1120.0 } else { 2240.0 };
++    let margin = if split { 72.0 } else { 112.0 };
++    let panels: Vec<_> = std::iter::once(left).chain(right).collect();
++    let mut canvas = Pixmap::new(2240, 1080).context("Panorama canvas")?;
++    canvas.fill(Color::from_rgba8(0, 0, 0, 255));
++    for (index, panel) in panels.iter().enumerate() {
++        anyhow::ensure!(PANORAMA_STYLES.contains(&panel.style), "Unknown panorama style");
++        let x = index as f32 * width + margin;
++        let inner = width - 2.0 * margin;
++        let color = graph_color(panel.value, panel.thresholds);
++        match panel.style {
++            "panorama_trace" => trace(&mut canvas, panel, (x, 120.0, inner, 840.0)),
++            "panorama_scope" => {
++                for i in 0..=2 {
++                    let y = 570.0 + i as f32 * 150.0;
++                    line(&mut canvas, &[(x, y), (x + inner, y)], 1.0, (35,35,35));
++                }
++                trace(&mut canvas, panel, (x, 570.0, inner, 300.0));
++            }
++            _ => {
++                line(&mut canvas, &[(x, 850.0), (x + inner, 850.0)], 2.0, (40,40,40));
++                if panel.value.is_finite() && panel.unit.ratio(panel.value) > 0.0 {
++                    line(&mut canvas, &[(x, 850.0), (x + inner * panel.unit.ratio(panel.value), 850.0)], 6.0, color);
++                }
++            }
++        }
++    }
++    let mut image = Image::from_pixels(2240, canvas.pixels().iter()
++        .map(|p| Rgba::new(p.red(), p.green(), p.blue(), p.alpha())).collect::<Vec<_>>());
++    for (index, panel) in panels.iter().enumerate() {
++        if panel.style == "panorama_trace" { continue; }
++        let center = (index as f32 * width + width / 2.0) as u32;
++        let label: String = panel.label.chars().take(if split { 25 } else { 48 }).collect();
++        let color = graph_color(panel.value, panel.thresholds);
++        text(&mut image, regular, &label, if split { 42.0 } else { 54.0 }, center, 145, (170,170,170));
++        let scope = panel.style == "panorama_scope";
++        text(&mut image, mono, &panel.unit.value(panel.value),
++             if split { 190.0 } else { 250.0 }, center, if scope { 345 } else { 460 }, color);
++        text(&mut image, regular, panel.unit.symbol(), 44.0, center,
++             if scope { 485 } else { 650 }, (170,170,170));
++    }
++    Ok(image)
++}
 diff --git a/coolercontrold/daemon/src/api/actor/device.rs b/coolercontrold/daemon/src/api/actor/device.rs
-index a43ec9a..0aa4cb0 100644
+index a43ec9a..0fc3d84 100644
 --- a/coolercontrold/daemon/src/api/actor/device.rs
 +++ b/coolercontrold/daemon/src/api/actor/device.rs
-@@ -229,6 +229,8 @@ impl ApiActor<DeviceMessage> for DeviceActor {
+@@ -229,6 +229,9 @@ impl ApiActor<DeviceMessage> for DeviceActor {
                          .save_lcd_image(&processed_image_data.0, processed_image_data.1)
                          .await?;
                      let lcd_settings = LcdSettings {
-+                        sensor_style: None,
++                        right_panel: None,
++            sensor_style: None,
 +            graph_thresholds: Vec::new(),
                          mode,
                          brightness,
                          orientation,
-@@ -443,6 +445,8 @@ impl ApiActor<DeviceMessage> for DeviceActor {
+@@ -443,6 +446,9 @@ impl ApiActor<DeviceMessage> for DeviceActor {
                          )
                          .await?;
                      let lcd_settings = LcdSettings {
-+                        sensor_style: None,
++                        right_panel: None,
++            sensor_style: None,
 +            graph_thresholds: Vec::new(),
                          mode,
                          brightness,
                          orientation,
 diff --git a/coolercontrold/daemon/src/config.rs b/coolercontrold/daemon/src/config.rs
-index feb6b8b..ae68b62 100644
+index feb6b8b..b5dfb2f 100644
 --- a/coolercontrold/daemon/src/config.rs
 +++ b/coolercontrold/daemon/src/config.rs
-@@ -49,6 +49,63 @@ pub struct Config {
+@@ -49,6 +49,87 @@ pub struct Config {
      document: RefCell<DocumentMut>,
  }
  
 +#[cfg(test)]
 +mod lianli_sensor_style_config_tests {
 +    use super::*;
++
++    #[test]
++    fn panorama_panels_roundtrip_and_clearing_split_removes_right_settings() {
++        let mut setting: LcdSettings = serde_json::from_value(serde_json::json!({
++            "mode":"temp", "colors":[], "sensor_style":"panorama_trace",
++            "temp_source":{"device_uid":"cpu","temp_name":"@percent:cpu_load"},
++            "right_panel":{"sensor_style":"panorama_scope",
++                "temp_source":{"device_uid":"gpu","temp_name":"@percent:gpu_load"},
++                "graph_thresholds":[{"value":70,"color":[255,0,0]}]}
++        })).unwrap();
++        let mut channel = Item::Table(Table::new());
++        Config::set_setting_lcd(&mut channel, &setting);
++        channel["lcd"].make_value();
++        let restored = Config::get_lcd(channel.as_table().unwrap()).unwrap().unwrap();
++        assert_eq!(restored, setting);
++        assert_eq!(serde_json::to_value(&restored).unwrap()["right_panel"]["temp_source"]["device_uid"], "gpu");
++        setting.right_panel = None;
++        Config::set_setting_lcd(&mut channel, &setting);
++        channel["lcd"].make_value();
++        assert!(Config::get_lcd(channel.as_table().unwrap()).unwrap().unwrap().right_panel.is_none());
++        assert!(channel["lcd"].get("right_panel").is_none());
++        let bad: DocumentMut = "lcd={mode='temp',colors=[],right_panel={sensor_style='mono_trace',temp_source={device_uid='gpu',temp_name='temp1'}}}".parse().unwrap();
++        assert!(Config::get_lcd(bad.as_table()).is_err());
++    }
 +
 +    #[test]
 +    fn graph_thresholds_roundtrip_clear_and_reject_invalid_config() {
@@ -1394,7 +1835,7 @@ index feb6b8b..ae68b62 100644
  impl Config {
      /// loads the configuration file data into memory
      pub async fn load_config_file() -> Result<Self> {
-@@ -391,11 +448,51 @@ impl Config {
+@@ -391,11 +472,64 @@ impl Config {
          channel_setting["lighting"]["colors"] = Item::Value(Value::Array(color_array));
      }
  
@@ -1425,6 +1866,19 @@ index feb6b8b..ae68b62 100644
          channel_setting["lcd"] = Item::None;
          channel_setting["lcd"]["mode"] =
              Item::Value(Value::String(Formatted::new(lcd.mode.to_string())));
++        if let Some(panel) = &lcd.right_panel {
++            let mut nested = Item::None;
++            let settings = LcdSettings {
++                right_panel: None, mode: LcdModeName::Temp,
++                sensor_style: Some(panel.sensor_style.clone()),
++                graph_thresholds: panel.graph_thresholds.clone(),
++                temp_source: Some(panel.temp_source.clone()),
++                brightness: None, orientation: None, image_file_processed: None,
++                carousel: None, colors: Vec::new(),
++            };
++            Self::set_setting_lcd(&mut nested, &settings);
++            channel_setting["lcd"]["right_panel"] = nested["lcd"].clone();
++        }
 +        if let Some(style) = &lcd.sensor_style {
 +            channel_setting["lcd"]["sensor_style"] =
 +                Item::Value(Value::String(Formatted::new(style.clone())));
@@ -1446,26 +1900,41 @@ index feb6b8b..ae68b62 100644
          if let Some(brightness) = lcd.brightness {
              channel_setting["lcd"]["brightness"] =
                  Item::Value(Value::Integer(Formatted::new(i64::from(brightness))));
-@@ -907,6 +1004,8 @@ impl Config {
+@@ -906,7 +1040,22 @@ impl Config {
+                 colors.push((r, g, b));
              }
              let temp_source = Self::get_temp_source(&lcd_table.clone().into_table())?;
++            let right_panel = if let Some(value) = lcd_table.get("right_panel") {
++                let panel = value.as_inline_table().context("Right panel must be a table")?;
++                let settings = crate::setting::LcdPanelSettings {
++                    temp_source: Self::get_temp_source(&panel.clone().into_table())?
++                        .context("Right panel needs a source")?,
++                    sensor_style: panel.get("sensor_style").and_then(Value::as_str)
++                        .context("Right panel needs a style")?.to_owned(),
++                    graph_thresholds: Self::get_graph_thresholds(panel.get("graph_thresholds"))?,
++                };
++                settings.validate()?;
++                Some(settings)
++            } else { None };
              Some(LcdSettings {
++                right_panel,
 +                graph_thresholds: Self::get_graph_thresholds(lcd_table.get("graph_thresholds"))?,
 +                sensor_style: lcd_table.get("sensor_style").and_then(Value::as_str).map(str::to_owned),
                  mode,
                  brightness,
                  orientation,
-@@ -2489,6 +2588,8 @@ mod tests {
+@@ -2489,6 +2638,9 @@ mod tests {
              let device_uid = "test-device-uid";
              let channel_name = "lcd1";
              let lcd = LcdSettings {
-+                sensor_style: None,
++                right_panel: None,
++            sensor_style: None,
 +            graph_thresholds: Vec::new(),
                  mode: LcdModeName::Image,
                  brightness: Some(50),
                  orientation: Some(90),
 diff --git a/coolercontrold/daemon/src/engine/commanders/lcd.rs b/coolercontrold/daemon/src/engine/commanders/lcd.rs
-index bdf065b..c72066f 100644
+index bdf065b..4bede0f 100644
 --- a/coolercontrold/daemon/src/engine/commanders/lcd.rs
 +++ b/coolercontrold/daemon/src/engine/commanders/lcd.rs
 @@ -17,7 +17,7 @@
@@ -1477,44 +1946,107 @@ index bdf065b..c72066f 100644
  use log::{debug, error, trace, warn};
  use moro_local::Scope;
  use std::cell::RefCell;
-@@ -64,6 +64,11 @@ impl LcdCommander {
+@@ -64,22 +64,23 @@ impl LcdCommander {
          channel_name: &str,
          lcd_settings: &LcdSettings,
      ) -> Result<()> {
+-        let temp_source = lcd_settings
+-            .temp_source
+-            .clone()
+-            .with_context(|| "Temp Source should be present for LCD Temp Scheduling")?;
+-        let _ = self
+-            .all_devices
+-            .get(temp_source.device_uid.as_str())
+-            .with_context(|| {
+-                format!(
+-                    "temp_source Device must currently be present to schedule lcd update: {}",
+-                    temp_source.device_uid
+-                )
+-            })?;
+-        let _ = self.all_devices.get(device_uid).with_context(|| {
+-            format!("Target Device to schedule lcd update must be present: {device_uid}")
+-        })?;
++        let mut lcd_settings = lcd_settings.clone();
 +        crate::setting::LcdGraphThreshold::validate(&lcd_settings.graph_thresholds)?;
++        let _ = self.all_devices.get(device_uid).context("LCD target is not present")?;
++        let panorama = self.is_panorama(device_uid, channel_name);
 +        let style = lcd_settings.sensor_style.as_deref().unwrap_or("classic");
-+        if !cc_image::SENSOR_STYLES.contains(&style) {
-+            bail!("Unknown sensor style: {style}");
++        if panorama {
++            lcd_settings.sensor_style = Some(cc_image::panorama_style(style)
++                .context("Unknown panorama style")?.to_owned());
++        } else {
++            anyhow::ensure!(cc_image::SENSOR_STYLES.contains(&style), "Unknown sensor style: {style}");
++            anyhow::ensure!(lcd_settings.right_panel.is_none(), "Split panels require a TRYX Panorama LCD");
 +        }
-         let temp_source = lcd_settings
-             .temp_source
-             .clone()
-@@ -80,6 +85,13 @@ impl LcdCommander {
-         let _ = self.all_devices.get(device_uid).with_context(|| {
-             format!("Target Device to schedule lcd update must be present: {device_uid}")
-         })?;
-+        if temp_source.temp_name.starts_with('@') {
-+            let (_, channel) = lcd_metric_source(&temp_source.temp_name)
-+                .context("Unknown LCD metric type")?;
-+            if !self.all_devices[&temp_source.device_uid].borrow().info.channels.contains_key(channel) {
-+                bail!("Unknown LCD metric channel: {channel}");
-+            }
++        self.validate_source(lcd_settings.temp_source.as_ref().context("LCD source is required")?)?;
++        if let Some(panel) = &lcd_settings.right_panel {
++            panel.validate()?;
++            self.validate_source(&panel.temp_source)?;
 +        }
          self.scheduled_settings
              .borrow_mut()
              .entry(device_uid.clone())
-@@ -206,7 +218,9 @@ impl LcdCommander {
+@@ -93,6 +94,26 @@ impl LcdCommander {
+         Ok(())
+     }
+ 
++    fn is_panorama(&self, device_uid: &str, channel_name: &str) -> bool {
++        self.all_devices.get(device_uid).is_some_and(|device| {
++            let device = device.borrow();
++            device.info.model.as_deref().is_some_and(|m| m.starts_with("TRYX PANORAMA"))
++                && device.info.channels.get(channel_name).and_then(|c| c.lcd_info.as_ref())
++                    .is_some_and(|lcd| lcd.screen_width == 2240 && lcd.screen_height == 1080)
++        })
++    }
++
++    fn validate_source(&self, source: &crate::setting::TempSource) -> Result<()> {
++        let device = self.all_devices.get(&source.device_uid).context("LCD source device is missing")?.borrow();
++        if source.temp_name.starts_with('@') {
++            let (_, channel) = lcd_metric_source(&source.temp_name).context("Unknown LCD metric type")?;
++            anyhow::ensure!(device.info.channels.contains_key(channel), "Unknown LCD metric channel");
++        } else {
++            anyhow::ensure!(device.info.temps.contains_key(&source.temp_name), "Unknown LCD temperature source");
++        }
++        Ok(())
++    }
++
+     pub async fn schedule_carousel(
+         &self,
+         device_uid: &UID,
+@@ -197,7 +218,11 @@ impl LcdCommander {
+                 if lcd_settings.mode != LcdModeName::Temp {
+                     continue;
+                 }
+-                if let Some(current_source_temp_data) = self.get_source_temp_data(lcd_settings) {
++                let source = lcd_settings.temp_source.as_ref().unwrap();
++                let data = self.get_source_temp_data(source).or_else(|| {
++                    self.is_panorama(device_uid, channel_name).then(|| missing_panel_data(source))
++                });
++                if let Some(current_source_temp_data) = data {
+                     let last_temp_set = self
+                         .scheduled_settings_metadata
+                         .borrow()
+@@ -206,7 +231,10 @@ impl LcdCommander {
                          .get(channel_name)
                          .expect("lcd scheduler metadata by channel should be present")
                          .last_temp_set;
 -                    if last_temp_set == current_source_temp_data.temp {
 +                    if last_temp_set == current_source_temp_data.temp
++                        && !self.is_panorama(device_uid, channel_name)
 +                        && !cc_image::sensor_style_uses_history(lcd_settings.sensor_style.as_deref().unwrap_or("classic"))
 +                        && !self.scheduled_settings_metadata.borrow()[device_uid][channel_name].is_first_application {
                          trace!(
                              "lcd scheduler skipping image update as there is no temperature change: {}",
                              current_source_temp_data.temp
-@@ -232,6 +246,17 @@ impl LcdCommander {
+@@ -225,13 +253,23 @@ impl LcdCommander {
+         temps_to_display
+     }
+ 
+-    fn get_source_temp_data(&self, lcd_settings: &LcdSettings) -> Option<TempData> {
+-        let setting_temp_source = lcd_settings.temp_source.as_ref().unwrap();
++    fn get_source_temp_data(&self, setting_temp_source: &crate::setting::TempSource) -> Option<TempData> {
+         if let Some(temp_source_device_lock) = self
+             .all_devices
              .get(setting_temp_source.device_uid.as_str())
          {
              let device_read_lock = temp_source_device_lock.borrow();
@@ -1532,48 +2064,78 @@ index bdf065b..c72066f 100644
              let label = device_read_lock
                  .info
                  .temps
-@@ -256,7 +281,7 @@ impl LcdCommander {
+@@ -248,6 +286,7 @@ impl LcdCommander {
+                 .iter()
+                 .last()
+                 .and_then(|status| {
++                    if (chrono::Local::now() - status.timestamp).num_seconds() > 5 { return None; }
+                     status
+                         .temps
+                         .iter()
+@@ -255,8 +294,8 @@ impl LcdCommander {
+                 })
                  .map(|temp_status|
                      // rounded to nearest 10th degree to avoid updating on minuscule degree changes
-                     (temp_status.temp * 10.).round() / 10.)?;
+-                    (temp_status.temp * 10.).round() / 10.)?;
 -            Some(TempData { temp, label })
++                    (temp_status.temp * 10.).round() / 10.).unwrap_or(f64::NAN);
 +            Some(TempData { temp, label, unit: SensorUnit::Celsius })
          } else {
              error!(
                  "Temperature Source Device for LCD Scheduler is currently not present: {}",
-@@ -289,16 +314,30 @@ impl LcdCommander {
+@@ -289,28 +328,45 @@ impl LcdCommander {
              .image_template
              .clone();
          let temp = temp_data_to_display.temp;
 +        let unit = temp_data_to_display.unit;
          let label = temp_data_to_display.label.clone();
+-        let self_clone = Rc::clone(&self);
+-        let generate_result =
+-            moro_local::async_scope!(|scope| -> Result<(Vec<u8>, ImageTemplate)> {
+-                scope
+-                    .spawn(async move {
+-                        self_clone.image_generator.generate_single_temp_image(
+-                            temp,
+-                            &label,
+-                            image_template,
+-                        )
+-                    })
+-                    .await
+-            })
+-            .await;
 +        let thresholds: Vec<_> = lcd_settings.graph_thresholds.iter().map(|t| (t.value, t.color)).collect();
 +        let style = lcd_settings.sensor_style.clone().unwrap_or_else(|| "classic".to_owned());
-+        let history = {
++        let panorama = self.is_panorama(&device_uid, &channel_name);
++        let right_data = lcd_settings.right_panel.as_ref().map(|panel| {
++            self.get_source_temp_data(&panel.temp_source)
++                .unwrap_or_else(|| missing_panel_data(&panel.temp_source))
++        });
++        let right_thresholds: Vec<_> = lcd_settings.right_panel.as_ref().map(|p| {
++            p.graph_thresholds.iter().map(|t| (t.value, t.color)).collect()
++        }).unwrap_or_default();
++        let (history, right_history) = {
 +            let mut all = self.scheduled_settings_metadata.borrow_mut();
 +            let metadata = all.get_mut(&device_uid).unwrap().get_mut(&channel_name).unwrap();
-+            if temp.is_finite() { metadata.temp_history.push(temp); } else { metadata.temp_history.clear(); }
-+            if metadata.temp_history.len() > 60 { metadata.temp_history.remove(0); }
-+            metadata.temp_history.clone()
++            push_panel_history(&mut metadata.temp_history, temp);
++            if let Some(data) = &right_data { push_panel_history(&mut metadata.right_history, data.temp); }
++            (metadata.temp_history.clone(), metadata.right_history.clone())
 +        };
-         let self_clone = Rc::clone(&self);
-         let generate_result =
-             moro_local::async_scope!(|scope| -> Result<(Vec<u8>, ImageTemplate)> {
-                 scope
-                     .spawn(async move {
--                        self_clone.image_generator.generate_single_temp_image(
-+                        self_clone.image_generator.generate_metric_image_with_thresholds(
-                             temp,
-                             &label,
-+                            &style,
-+                            &history,
-                             image_template,
-+                            unit,
-+                            &thresholds,
-                         )
-                     })
-                     .await
-@@ -310,7 +349,7 @@ impl LcdCommander {
++        let generate_result = if panorama {
++            let left = cc_image::PanoramaPanel { value: temp, label: &label, style: &style,
++                history: &history, unit, thresholds: &thresholds };
++            let right = right_data.as_ref().zip(lcd_settings.right_panel.as_ref()).map(|(data, panel)| {
++                cc_image::PanoramaPanel { value: data.temp, label: &data.label,
++                    style: &panel.sensor_style, history: &right_history, unit: data.unit,
++                    thresholds: &right_thresholds }
++            });
++            self.image_generator.generate_panorama_image(left, right)
++        } else {
++            self.image_generator.generate_metric_image_with_thresholds(
++                temp, &label, &style, &history, image_template, unit, &thresholds)
++        };
+         let Ok((image_bytes, image_template)) = generate_result
+             .inspect_err(|err| error!("Error generating image for lcd scheduler: {err}"))
+         else {
              return;
          };
  
@@ -1582,25 +2144,27 @@ index bdf065b..c72066f 100644
          // std blocking write:
          if let Err(err) =
              std::fs::File::create(&image_path).and_then(|mut f| f.write_all(&image_bytes))
-@@ -348,6 +387,8 @@ impl LcdCommander {
+@@ -348,6 +404,9 @@ impl LcdCommander {
              None
          };
          let lcd_settings = LcdSettings {
++            right_panel: None,
 +            sensor_style: None,
 +            graph_thresholds: Vec::new(),
              mode: LcdModeName::Image,
              brightness,
              orientation,
-@@ -443,6 +484,8 @@ impl LcdCommander {
+@@ -443,6 +502,9 @@ impl LcdCommander {
                      None
                  };
                  let lcd_settings = LcdSettings {
-+                    sensor_style: None,
++                    right_panel: None,
++            sensor_style: None,
 +            graph_thresholds: Vec::new(),
                      mode: LcdModeName::Image,
                      brightness,
                      orientation,
-@@ -476,12 +519,14 @@ impl LcdCommander {
+@@ -476,12 +538,15 @@ impl LcdCommander {
  struct TempData {
      pub temp: Temp,
      pub label: TempLabel,
@@ -1612,18 +2176,20 @@ index bdf065b..c72066f 100644
      /// single-temp metadata
      pub last_temp_set: f64,
 +    pub temp_history: Vec<f64>,
++    pub right_history: Vec<f64>,
      pub image_template: Option<ImageTemplate>,
  
      /// carousel metadata
-@@ -497,6 +542,7 @@ impl Default for SettingMetadata {
+@@ -497,6 +562,8 @@ impl Default for SettingMetadata {
      fn default() -> Self {
          Self {
              last_temp_set: f64::default(),
 +            temp_history: Vec::new(),
++            right_history: Vec::new(),
              image_template: None,
              interval_instant: Instant::now(),
              processed_images: Vec::new(),
-@@ -505,3 +551,54 @@ impl Default for SettingMetadata {
+@@ -505,3 +572,128 @@ impl Default for SettingMetadata {
          }
      }
  }
@@ -1678,23 +2244,99 @@ index bdf065b..c72066f 100644
 +        assert_eq!(lcd_metric_source("@unknown:cpu"), None);
 +    }
 +}
++
++
++fn push_panel_history(history: &mut Vec<f64>, value: f64) {
++    if value.is_finite() { history.push(value); } else { history.clear(); }
++    if history.len() > 60 { history.remove(0); }
++}
++
++fn missing_panel_data(source: &crate::setting::TempSource) -> TempData {
++    TempData { temp: f64::NAN, label: "--".to_owned(),
++        unit: lcd_metric_source(&source.temp_name).map_or(SensorUnit::Celsius, |(unit, _)| unit) }
++}
++
++#[cfg(test)]
++mod lianli_panorama_scheduler_tests {
++    use super::*;
++    use crate::device::{Device, DeviceInfo, DeviceType, ChannelInfo, LcdInfo, Status, ChannelStatus};
++
++    fn fixture() -> (LcdCommander, LcdSettings) {
++        let mut info = DeviceInfo::default();
++        info.model = Some("TRYX PANORAMA 360".to_owned());
++        info.channels.insert("lcd".to_owned(), ChannelInfo {
++            lcd_info: Some(LcdInfo { screen_width: 2240, screen_height: 1080, max_image_size_bytes: 20000000 }),
++            ..Default::default()
++        });
++        for name in ["cpu_load", "gpu_load"] {
++            info.channels.insert(name.to_owned(), ChannelInfo { label: Some(name.to_owned()), ..Default::default() });
++        }
++        let device = Rc::new(RefCell::new(Device::new("TRYX".to_owned(), DeviceType::ServicePlugin, 1,
++            None, info, Some("tryx-test".to_owned()), 1.0)));
++        device.borrow_mut().set_status(Status { channels: vec![
++            ChannelStatus { name: "cpu_load".to_owned(), duty: Some(40.0), ..Default::default() },
++            ChannelStatus { name: "gpu_load".to_owned(), duty: Some(70.0), ..Default::default() },
++        ], ..Default::default() });
++        let commander = LcdCommander::new(Rc::new(HashMap::from([("screen".to_owned(), device)])), HashMap::new());
++        let settings = serde_json::from_value(serde_json::json!({
++            "mode":"temp", "colors":[], "sensor_style":"mono_trace",
++            "temp_source":{"device_uid":"screen","temp_name":"@percent:cpu_load"},
++            "right_panel":{"sensor_style":"panorama_scope", "temp_source":{"device_uid":"screen","temp_name":"@percent:gpu_load"}}
++        })).unwrap();
++        (commander, settings)
++    }
++
++    #[test]
++    fn validates_both_sources_migrates_fan_style_and_updates_when_left_is_unchanged() {
++        let (commander, mut setting) = fixture();
++        commander.schedule_single_temp(&"screen".to_owned(), "lcd", &setting).unwrap();
++        assert_eq!(commander.scheduled_settings.borrow()["screen"]["lcd"].sensor_style.as_deref(), Some("panorama_trace"));
++        {
++            let mut metadata = commander.scheduled_settings_metadata.borrow_mut();
++            let entry = metadata.get_mut("screen").unwrap().get_mut("lcd").unwrap();
++            entry.last_temp_set = 40.0;
++            entry.is_first_application = false;
++        }
++        assert_eq!(commander.determine_single_temps_to_display().len(), 1);
++        let data = commander.get_source_temp_data(&setting.right_panel.as_ref().unwrap().temp_source).unwrap();
++        assert_eq!(data.temp, 70.0);
++        setting.right_panel.as_mut().unwrap().temp_source.temp_name = "@percent:missing".to_owned();
++        assert!(commander.schedule_single_temp(&"screen".to_owned(), "lcd", &setting).is_err());
++    }
++
++    #[test]
++    fn fan_lcds_reject_split_and_panel_histories_are_independent() {
++        let (commander, setting) = fixture();
++        commander.all_devices["screen"].borrow_mut().info.model = Some("Lian Li UNI TL LCD".to_owned());
++        assert!(commander.schedule_single_temp(&"screen".to_owned(), "lcd", &setting).is_err());
++        let mut left = vec![10.0; 60];
++        let mut right = vec![70.0; 60];
++        push_panel_history(&mut left, 40.0);
++        push_panel_history(&mut right, f64::NAN);
++        assert_eq!(left.len(), 60);
++        assert_eq!(left.last(), Some(&40.0));
++        assert!(right.is_empty());
++    }
++}
 diff --git a/coolercontrold/daemon/src/engine/main.rs b/coolercontrold/daemon/src/engine/main.rs
-index d139594..7d45e49 100644
+index d139594..fa3be3f 100644
 --- a/coolercontrold/daemon/src/engine/main.rs
 +++ b/coolercontrold/daemon/src/engine/main.rs
-@@ -843,6 +843,8 @@ impl Engine {
+@@ -843,6 +843,9 @@ impl Engine {
              }
          };
          let lcd_settings = LcdSettings {
++            right_panel: None,
 +            sensor_style: None,
 +            graph_thresholds: Vec::new(),
              mode: LcdModeName::Image,
              brightness: None,
              orientation: None,
-@@ -1943,6 +1945,8 @@ mod tests {
+@@ -1943,6 +1946,9 @@ mod tests {
  
      fn lcd_settings_with_image(image_path: Option<String>) -> LcdSettings {
          LcdSettings {
++            right_panel: None,
 +            sensor_style: None,
 +            graph_thresholds: Vec::new(),
              mode: LcdModeName::Image,
@@ -1833,14 +2475,15 @@ index 107e4d2..fc308df 100644
      /// 400 ms value. It bounds engine reaction latency to a
      /// temperature change to `poll_rate + SNAPSHOT_TIMEOUT_MS` and
 diff --git a/coolercontrold/daemon/src/repositories/liquidctl/liquidctl_repo.rs b/coolercontrold/daemon/src/repositories/liquidctl/liquidctl_repo.rs
-index 4173639..2658bf1 100644
+index 4173639..7a854fb 100644
 --- a/coolercontrold/daemon/src/repositories/liquidctl/liquidctl_repo.rs
 +++ b/coolercontrold/daemon/src/repositories/liquidctl/liquidctl_repo.rs
-@@ -874,6 +874,8 @@ impl LiquidctlRepo {
+@@ -874,6 +874,9 @@ impl LiquidctlRepo {
                      continue;
                  }
                  let lcd_settings = LcdSettings {
-+                    sensor_style: None,
++                    right_panel: None,
++            sensor_style: None,
 +            graph_thresholds: Vec::new(),
                      mode: LcdModeName::Liquid,
                      brightness: None,
@@ -1899,13 +2542,16 @@ index 40cd492..d3c6d54 100644
 +    }
 +}
 diff --git a/coolercontrold/daemon/src/setting.rs b/coolercontrold/daemon/src/setting.rs
-index dedc0e0..fcf9952 100644
+index dedc0e0..4a3c5a1 100644
 --- a/coolercontrold/daemon/src/setting.rs
 +++ b/coolercontrold/daemon/src/setting.rs
-@@ -113,6 +113,12 @@ pub enum LcdModeName {
+@@ -113,6 +113,15 @@ pub enum LcdModeName {
  
  #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
  pub struct LcdSettings {
++    /// TRYX only: presence enables a second independently configured half.
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub right_panel: Option<LcdPanelSettings>,
 +    /// Inclusive lower bounds for Mono Trace colors. Empty means white.
 +    #[serde(default)]
 +    pub graph_thresholds: Vec<LcdGraphThreshold>,
@@ -1915,10 +2561,26 @@ index dedc0e0..fcf9952 100644
      /// The Lcd mode name
      pub mode: LcdModeName,
  
-@@ -134,6 +140,24 @@ pub struct LcdSettings {
+@@ -134,6 +143,40 @@ pub struct LcdSettings {
      pub temp_source: Option<TempSource>,
  }
  
++#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
++pub struct LcdPanelSettings {
++    pub temp_source: TempSource,
++    pub sensor_style: String,
++    #[serde(default)]
++    pub graph_thresholds: Vec<LcdGraphThreshold>,
++}
++
++impl LcdPanelSettings {
++    pub fn validate(&self) -> anyhow::Result<()> {
++        anyhow::ensure!(cc_image::PANORAMA_STYLES.contains(&self.sensor_style.as_str()),
++                        "Right panel requires a panorama style");
++        LcdGraphThreshold::validate(&self.graph_thresholds)
++    }
++}
++
 +#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 +pub struct LcdGraphThreshold {
 +    pub value: f64,

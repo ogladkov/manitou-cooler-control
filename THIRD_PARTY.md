@@ -70,3 +70,8 @@ through reflection. No TRYX APK, firmware or vendor code is distributed.
 The build downloads Google's Apache-2.0 licensed R8/D8 **8.5.35**, verified by
 SHA-256 in `scripts/build-tryx-renderer.sh`; the compiler is not bundled in wheels.
 Compiler documentation: <https://r8.googlesource.com/r8/+/refs/heads/main/README.md>.
+
+Panorama Minimal, Panorama Scope and Panorama Trace are original layouts rendered
+at 2240×1080, optionally as two independently configured 1120×1080 panels.
+They use CoolerControl's bundled Roboto fonts and the existing drawing libraries;
+no TRYX/Kanali artwork or layouts are copied.

@@ -296,3 +296,17 @@ def test_static_frames_never_reset_vendor_layout_or_write_media(tmp_path, monkey
     transport._release()
     transport.display(b"three", "jpg", 70)
     assert frames[-2:] == [b"three", b"three"]  # reconnect redraws the saved frame
+
+
+def test_native_panorama_frame_keeps_fold_position_and_uses_full_screen():
+    source = Image.new("RGB", (2240, 1080), "red")
+    source.paste("blue", (1120, 0, 2240, 1080))
+    source.paste("black", (1112, 0, 1128, 1080))
+    data = BytesIO()
+    source.save(data, "PNG")
+    encoded, _ = encode_media(data.getvalue())
+    frame = Image.open(BytesIO(encoded))
+    assert frame.size == (2240, 1080)
+    assert frame.getpixel((20, 540))[0] > 240
+    assert frame.getpixel((2220, 540))[2] > 240
+    assert max(frame.getpixel((1120, 540))) < 10
