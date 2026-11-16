@@ -9,6 +9,7 @@ import threading
 import time
 
 from coolercontrol.models.v1 import device_pb2, status_pb2
+from .disks import DiskTelemetry
 from .openai_limits import DEFAULT_CHANNEL, DEFAULT_LIMITS_FILE, cached_limits
 
 DEVICE_ID = "tl-system-metrics"
@@ -82,6 +83,8 @@ class Telemetry:
         self.stop = threading.Event()
         self.thread = None
         self.labels = {"cpu_load": "CPU load", "ram_load": "RAM used"}
+        self.disks = DiskTelemetry(simulate=simulate)
+        self.labels.update(self.disks.labels)
         self.limits_file = limits_file
         self.labels[DEFAULT_CHANNEL] = "Codex weekly left"
         if not simulate:
@@ -106,7 +109,7 @@ class Telemetry:
 
     def descriptor(self):
         device = device_pb2.Device(id=DEVICE_ID, uid_info=DEVICE_ID, name="Lian Li System Metrics")
-        device.info.model = "CPU / RAM / GPU / VRAM / Codex weekly limits"
+        device.info.model = "CPU / RAM / GPU / VRAM / disk usage / Codex weekly limits"
         for key, label in self.labels.items():
             device.info.channels[key].label = label  # telemetry only, no control options
         return device
@@ -114,6 +117,7 @@ class Telemetry:
     def sample(self):
         values = {}
         if self.simulate:
+            self.disks.sample()
             values = {"cpu_load": 36.5, "ram_load": 62.5, DEFAULT_CHANNEL: 82.0,
                       **gpu_values(self.gpus)}
         else:
@@ -143,10 +147,12 @@ class Telemetry:
     def status(self):
         with self.lock:
             values = self.values.copy() if time.monotonic() - self.updated < 5 else {}
+        values.update(self.disks.snapshot())
         return [status_pb2.Status(id=key, speed=status_pb2.Status.FanSpeed(duty=value))
                 for key, value in values.items()]
 
     def start(self):
+        self.disks.start()
         self.sample()
         def run():
             while not self.stop.wait(1):
@@ -155,6 +161,7 @@ class Telemetry:
         self.thread.start()
 
     def close(self):
+        self.disks.close()
         self.stop.set()
         if self.thread:
             self.thread.join(timeout=3)

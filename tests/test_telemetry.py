@@ -49,11 +49,14 @@ def test_sampler_is_read_only_and_omits_stale_or_failed_values(monkeypatch):
     telemetry = Telemetry(simulate=True)
     telemetry.sample()
     descriptor = telemetry.descriptor()
-    assert len(descriptor.info.channels) == 5
+    assert len(descriptor.info.channels) == 7
     assert all(c.WhichOneof('options') is None for c in descriptor.info.channels.values())
-    assert len(telemetry.status()) == 5
+    assert len(telemetry.status()) == 7
     with telemetry.lock:
         telemetry.updated = time.monotonic() - 6
+    with telemetry.disks.lock:
+        telemetry.disks.values = {key: (value, time.monotonic() - 16)
+                                  for key, (value, _) in telemetry.disks.values.items()}
     assert telemetry.status() == []
     telemetry.simulate = False
     def fail():

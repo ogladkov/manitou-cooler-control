@@ -66,7 +66,7 @@ def test_native_rgb_contract_preserves_seven_lcds_and_fan_control(running):
                 device_id=device.id, channel_id=channel))
     assert stub.Health(health_pb2.HealthRequest()).status == 1
     system_status = stub.Status(status_pb2.StatusRequest(device_id=DEVICE_ID))
-    assert len(system_status.status) == 5
+    assert len(system_status.status) == 7
     assert all(s.speed.HasField("duty") and not s.speed.HasField("rpm")
                for s in system_status.status)
     with pytest.raises(grpc.RpcError) as error:
