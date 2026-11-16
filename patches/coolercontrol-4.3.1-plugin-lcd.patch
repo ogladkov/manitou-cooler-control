@@ -1,16 +1,18 @@
 diff --git a/coolercontrol-ui/src/components/GraphThresholdEditor.vue b/coolercontrol-ui/src/components/GraphThresholdEditor.vue
 new file mode 100644
-index 0000000..7a3bebe
+index 0000000..2cc8deb
 --- /dev/null
 +++ b/coolercontrol-ui/src/components/GraphThresholdEditor.vue
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,50 @@
 +<script setup lang="ts">
++import { useId } from 'vue'
 +import Button from 'primevue/button'
 +import InputNumber from 'primevue/inputnumber'
 +import CCColorPicker from '@/components/CCColorPicker.vue'
 +import { useI18n } from 'vue-i18n'
 +import { graphThresholdsValid, type GraphThresholdDraft } from '@/utils/graphThresholds'
 +
++const id = useId()
 +const rows = defineModel<GraphThresholdDraft[]>({ required: true })
 +const props = defineProps<{ unit: string }>()
 +const { t } = useI18n()
@@ -37,8 +39,8 @@ index 0000000..7a3bebe
 +        <p class="mb-3 text-sm text-text-color-secondary">{{ t('views.lcd.graphColorsHelp') }}</p>
 +        <div v-for="(row, index) in rows" :key="index" class="mb-3 flex items-end gap-2">
 +            <div class="min-w-0 flex-1">
-+                <label :for="`graph-threshold-${index}`" class="mb-1 block text-sm">{{ t('views.lcd.graphAt') }}</label>
-+                <InputNumber :input-id="`graph-threshold-${index}`" :model-value="row.value"
++                <label :for="`${id}-graph-threshold-${index}`" class="mb-1 block text-sm">{{ t('views.lcd.graphAt') }}</label>
++                <InputNumber :input-id="`${id}-graph-threshold-${index}`" :model-value="row.value"
 +                    :max-fraction-digits="2" :use-grouping="false" :suffix="` ${unit}`"
 +                    class="w-full" input-class="w-full" @update:model-value="setValue(index, $event)" />
 +            </div>
@@ -54,10 +56,10 @@ index 0000000..7a3bebe
 +</template>
 diff --git a/coolercontrol-ui/src/components/PanoramaLayoutPicker.vue b/coolercontrol-ui/src/components/PanoramaLayoutPicker.vue
 new file mode 100644
-index 0000000..45975f8
+index 0000000..a4f8362
 --- /dev/null
 +++ b/coolercontrol-ui/src/components/PanoramaLayoutPicker.vue
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,51 @@
 +<script setup lang="ts">
 +import { useI18n } from 'vue-i18n'
 +const { t } = useI18n()
@@ -66,30 +68,52 @@ index 0000000..45975f8
 +</script>
 +
 +<template>
-+    <fieldset class="mb-6">
++    <fieldset class="panorama-layout mb-6">
 +        <legend class="mb-3 text-text-color-secondary">{{ t('views.lcd.panoramaLayout') }}</legend>
-+        <div class="flex gap-2 mb-3">
-+            <button v-for="split in [false, true]" :key="String(split)" type="button"
-+                :aria-pressed="modelValue === split"
-+                class="flex-1 rounded-lg border-2 p-3"
-+                :class="modelValue === split ? 'border-cyan-400 bg-bg-two' : 'border-border-one'"
-+                @click="emit('update:modelValue', split)">
-+                {{ t(split ? 'views.lcd.panoramaSplit' : 'views.lcd.panoramaWide') }}
-+            </button>
++        <div class="panorama-layout-body">
++            <div>
++                <div class="flex gap-2 mb-3">
++                    <button v-for="split in [false, true]" :key="String(split)" type="button"
++                        :aria-pressed="modelValue === split"
++                        class="flex-1 rounded-lg border-2 p-3"
++                        :class="modelValue === split ? 'border-cyan-400 bg-bg-two' : 'border-border-one'"
++                        @click="emit('update:modelValue', split)">
++                        {{ t(split ? 'views.lcd.panoramaSplit' : 'views.lcd.panoramaWide') }}
++                    </button>
++                </div>
++                <p class="mt-2 text-sm text-text-color-secondary">{{ t(modelValue ? 'views.lcd.panoramaSplitHint' : 'views.lcd.panoramaWideHint') }}</p>
++            </div>
++            <div class="panorama-layout-preview flex bg-black overflow-hidden rounded-lg border border-border-one"
++                 style="aspect-ratio: 2240 / 1080" role="img" :aria-label="t('views.lcd.panoramaLayout')">
++                <img :src="`/lcd-styles/${leftStyle}${modelValue ? '_panel' : ''}.png`" alt=""
++                     :class="modelValue ? 'w-1/2' : 'w-full'" class="object-contain" />
++                <img v-if="modelValue" :src="`/lcd-styles/${rightStyle}_panel.png`" alt=""
++                     class="w-1/2 object-contain border-l border-border-one" />
++            </div>
 +        </div>
-+        <div class="flex bg-black overflow-hidden rounded-lg border border-border-one"
-+             style="aspect-ratio: 2240 / 1080" role="img" :aria-label="t('views.lcd.panoramaLayout')">
-+            <img :src="`/lcd-styles/${leftStyle}${modelValue ? '_panel' : ''}.png`" alt=""
-+                 :class="modelValue ? 'w-1/2' : 'w-full'" class="object-contain" />
-+            <img v-if="modelValue" :src="`/lcd-styles/${rightStyle}_panel.png`" alt=""
-+                 class="w-1/2 object-contain border-l border-border-one" />
-+        </div>
-+        <p class="mt-2 text-sm text-text-color-secondary">{{ t(modelValue ? 'views.lcd.panoramaSplitHint' : 'views.lcd.panoramaWideHint') }}</p>
 +    </fieldset>
 +</template>
++
++<style scoped>
++.panorama-layout-body {
++    display: grid;
++    gap: 1.5rem;
++    align-items: center;
++}
++.panorama-layout-preview {
++    width: 100%;
++    max-width: 32rem;
++    justify-self: center;
++}
++@container (min-width: 46rem) {
++    .panorama-layout-body {
++        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
++    }
++}
++</style>
 diff --git a/coolercontrol-ui/src/components/SensorStylePicker.vue b/coolercontrol-ui/src/components/SensorStylePicker.vue
 new file mode 100644
-index 0000000..52a764b
+index 0000000..c4a0f30
 --- /dev/null
 +++ b/coolercontrol-ui/src/components/SensorStylePicker.vue
 @@ -0,0 +1,46 @@
@@ -121,13 +145,13 @@ index 0000000..52a764b
 +<template>
 +    <fieldset class="mb-6">
 +        <legend class="mb-3 text-text-color-secondary">{{ title }}</legend>
-+        <div class="grid grid-cols-2 gap-3" role="group" :aria-label="title">
++        <div class="grid gap-3" :class="panorama ? 'grid-cols-3' : 'grid-cols-2'" role="group" :aria-label="title">
 +            <button
 +                v-for="style in styles"
 +                :key="style.id"
 +                type="button"
 +                :aria-pressed="modelValue === style.id"
-+                class="rounded-lg border-2 p-2 text-center transition-colors focus-visible:outline focus-visible:outline-2"
++                class="min-w-0 rounded-lg border-2 p-2 text-center transition-colors focus-visible:outline focus-visible:outline-2"
 +                :class="modelValue === style.id ? 'border-cyan-400 bg-bg-two' : 'border-border-one hover:border-cyan-600'"
 +                @click="emit('update:modelValue', style.id)"
 +            >
@@ -467,7 +491,7 @@ index 0000000..a1472e6
 +    return 'panorama_minimal'
 +}
 diff --git a/coolercontrol-ui/src/views/LcdView.vue b/coolercontrol-ui/src/views/LcdView.vue
-index dbf4e04..25f9953 100644
+index dbf4e04..fe3a556 100644
 --- a/coolercontrol-ui/src/views/LcdView.vue
 +++ b/coolercontrol-ui/src/views/LcdView.vue
 @@ -58,6 +58,12 @@ import Listbox, { ListboxChangeEvent } from 'primevue/listbox'
@@ -634,16 +658,17 @@ index dbf4e04..25f9953 100644
              chosenTemp,
              imagesPath,
              imagesDelayInterval,
-@@ -503,7 +558,7 @@ onUnmounted(() => {
+@@ -503,7 +558,8 @@ onUnmounted(() => {
      </div>
      <ScrollAreaRoot id="lcd-control-pane" style="--scrollbar-size: 10px">
          <ScrollAreaViewport class="p-4 pb-16 h-screen w-full">
 -            <div class="w-full flex flex-col lg:flex-row">
-+            <div class="w-full flex flex-col lg:flex-row lg:flex-wrap gap-y-6">
++            <div class="w-full flex flex-col lg:flex-row lg:flex-wrap gap-y-6"
++                :class="{ 'lcd-panorama': isPanorama && selectedLcdMode.name === 'temp' }">
                  <div id="left-side">
                      <div class="mt-0 mr-4 w-96">
                          <small class="ml-3 font-light text-sm text-text-color-secondary">
-@@ -616,7 +671,8 @@ onUnmounted(() => {
+@@ -616,7 +672,8 @@ onUnmounted(() => {
                  <div
                      id="right-side"
                      v-if="selectedLcdMode.image"
@@ -653,48 +678,221 @@ index dbf4e04..25f9953 100644
                  >
                      <div class="flex w-full mr-0">
                          <img
-@@ -643,6 +699,13 @@ onUnmounted(() => {
+@@ -641,49 +698,106 @@ onUnmounted(() => {
+                         selectedLcdMode.type === LcdModeType.CUSTOM &&
+                         selectedLcdMode.name === 'temp'
                      "
-                     class="mt-0 mr-4 w-96"
+-                    class="mt-0 mr-4 w-96"
++                    :class="isPanorama ? 'lcd-panorama-editor' : 'mt-0 mr-4 w-96'"
                  >
+-                    <small class="ml-3 font-light text-sm text-text-color-secondary">
+-                        {{ t('views.lcd.tempSource') }}
+-                    </small>
+-                    <Listbox
+-                        v-model="chosenTemp"
+-                        class="w-full mt-0"
+-                        :options="tempSources"
+-                        filter
+-                        checkmark
+-                        option-label="tempFrontendName"
+-                        option-group-label="deviceName"
+-                        option-group-children="temps"
+-                        filter-placeholder="Search"
+-                        list-style="max-height: 100%"
+-                        :invalid="chosenTemp == null"
+-                        v-tooltip.top="t('views.lcd.tempSourceTooltip')"
+-                        @change="changeTempSource"
+-                    >
+-                        <template #optiongroup="slotProps">
+-                            <div class="flex items-center">
+-                                <svg-icon
+-                                    type="mdi"
+-                                    :path="mdiMemory"
+-                                    :size="deviceStore.getREMSize(1.3)"
+-                                    class="mr-2"
+-                                />
+-                                <div>{{ slotProps.option.deviceName }}</div>
+-                            </div>
+-                        </template>
+-                        <template #option="slotProps">
+-                            <div class="flex items-center w-full justify-between">
+-                                <div>
+-                                    <span
+-                                        class="pi pi-minus mr-2 ml-1"
+-                                        :style="{ color: slotProps.option.lineColor }"
+-                                    />{{ slotProps.option.tempFrontendName }}
+-                                </div>
+-                                <div>{{ slotProps.option.temp }} {{ t('common.tempUnit') }}</div>
+-                            </div>
+-                        </template>
+-                    </Listbox>
 +                    <PanoramaLayoutPicker v-if="isPanorama" v-model="splitPanorama"
 +                        :left-style="selectedSensorStyle" :right-style="rightSensorStyle" />
-+                    <h3 v-if="isPanorama && splitPanorama" class="mb-4">{{ t('views.lcd.panoramaLeft') }}</h3>
-+                    <SensorStylePicker v-model="selectedSensorStyle" :title="t('views.lcd.sensorStyle')"
-+                        :panorama="isPanorama" :split="splitPanorama" />
-+                    <GraphThresholdEditor v-if="isPanorama || selectedSensorStyle === 'mono_trace'"
-+                        v-model="graphThresholds" :unit="chosenTemp?.unit ?? '°C'" />
-                     <small class="ml-3 font-light text-sm text-text-color-secondary">
-                         {{ t('views.lcd.tempSource') }}
-                     </small>
-@@ -680,7 +743,26 @@ onUnmounted(() => {
-                                         :style="{ color: slotProps.option.lineColor }"
-                                     />{{ slotProps.option.tempFrontendName }}
-                                 </div>
--                                <div>{{ slotProps.option.temp }} {{ t('common.tempUnit') }}</div>
-+                                <div>{{ slotProps.option.temp }} {{ slotProps.option.unit }}</div>
-+                            </div>
-+                        </template>
-+                    </Listbox>
-+                </div>
-+                <div v-if="isPanorama && splitPanorama && selectedLcdMode.name === 'temp'"
-+                     class="mt-0 mr-4 w-96">
-+                    <h3 class="mb-4">{{ t('views.lcd.panoramaRight') }}</h3>
-+                    <SensorStylePicker v-model="rightSensorStyle" :title="t('views.lcd.sensorStyle')"
-+                        panorama split />
-+                    <GraphThresholdEditor v-model="rightGraphThresholds" :unit="rightTemp?.unit ?? '°C'" />
-+                    <small class="ml-3 font-light text-sm text-text-color-secondary">{{ t('views.lcd.tempSource') }}</small>
-+                    <Listbox v-model="rightTemp" :options="tempSources" filter checkmark
-+                        option-label="tempFrontendName" option-group-label="deviceName"
-+                        option-group-children="temps" filter-placeholder="Search"
-+                        class="w-full" list-style="max-height: 100%" :invalid="rightTemp == null">
-+                        <template #option="slotProps">
-+                            <div class="flex items-center w-full justify-between">
-+                                <span>{{ slotProps.option.tempFrontendName }}</span>
-+                                <span>{{ slotProps.option.temp }} {{ slotProps.option.unit }}</span>
-                             </div>
-                         </template>
-                     </Listbox>
++                    <div class="lcd-sensor-panels" :class="{ 'lcd-sensor-panels-split': isPanorama && splitPanorama }">
++                        <section class="lcd-sensor-panel">
++                            <h3 v-if="isPanorama && splitPanorama" class="mb-4">{{ t('views.lcd.panoramaLeft') }}</h3>
++                            <SensorStylePicker v-model="selectedSensorStyle" :title="t('views.lcd.sensorStyle')"
++                                :panorama="isPanorama" :split="splitPanorama" />
++                            <GraphThresholdEditor class="lcd-panel-thresholds" v-if="isPanorama || selectedSensorStyle === 'mono_trace'"
++                                v-model="graphThresholds" :unit="chosenTemp?.unit ?? '°C'" />
++                            <small class="ml-3 font-light text-sm text-text-color-secondary">
++                                {{ t('views.lcd.tempSource') }}
++                            </small>
++                            <Listbox
++                                v-model="chosenTemp"
++                                class="w-full mt-0"
++                                :options="tempSources"
++                                filter
++                                checkmark
++                                option-label="tempFrontendName"
++                                option-group-label="deviceName"
++                                option-group-children="temps"
++                                filter-placeholder="Search"
++                                :list-style="isPanorama ? 'height: 18rem; max-height: 18rem' : 'max-height: 100%'"
++                                :invalid="chosenTemp == null"
++                                v-tooltip.top="t('views.lcd.tempSourceTooltip')"
++                                @change="changeTempSource"
++                            >
++                                <template #optiongroup="slotProps">
++                                    <div class="flex items-center">
++                                        <svg-icon
++                                            type="mdi"
++                                            :path="mdiMemory"
++                                            :size="deviceStore.getREMSize(1.3)"
++                                            class="mr-2"
++                                        />
++                                        <div>{{ slotProps.option.deviceName }}</div>
++                                    </div>
++                                </template>
++                                <template #option="slotProps">
++                                    <div class="flex items-center w-full min-w-0 gap-2 justify-between">
++                                        <div class="min-w-0 truncate">
++                                            <span
++                                                class="pi pi-minus mr-2 ml-1"
++                                                :style="{ color: slotProps.option.lineColor }"
++                                            />{{ slotProps.option.tempFrontendName }}
++                                        </div>
++                                        <div class="shrink-0">{{ slotProps.option.temp }} {{ slotProps.option.unit }}</div>
++                                    </div>
++                                </template>
++                            </Listbox>
++                        </section>
++                        <section v-if="isPanorama && splitPanorama" class="lcd-sensor-panel">
++                            <h3 class="mb-4">{{ t('views.lcd.panoramaRight') }}</h3>
++                            <SensorStylePicker v-model="rightSensorStyle" :title="t('views.lcd.sensorStyle')"
++                                panorama split />
++                            <GraphThresholdEditor class="lcd-panel-thresholds" v-model="rightGraphThresholds" :unit="rightTemp?.unit ?? '°C'" />
++                            <small class="ml-3 font-light text-sm text-text-color-secondary">
++                                {{ t('views.lcd.tempSource') }}
++                            </small>
++                            <Listbox
++                                v-model="rightTemp"
++                                class="w-full mt-0"
++                                :options="tempSources"
++                                filter
++                                checkmark
++                                option-label="tempFrontendName"
++                                option-group-label="deviceName"
++                                option-group-children="temps"
++                                filter-placeholder="Search"
++                                :list-style="isPanorama ? 'height: 18rem; max-height: 18rem' : 'max-height: 100%'"
++                                :invalid="rightTemp == null"
++                                v-tooltip.top="t('views.lcd.tempSourceTooltip')"
++                            >
++                                <template #optiongroup="slotProps">
++                                    <div class="flex items-center">
++                                        <svg-icon
++                                            type="mdi"
++                                            :path="mdiMemory"
++                                            :size="deviceStore.getREMSize(1.3)"
++                                            class="mr-2"
++                                        />
++                                        <div>{{ slotProps.option.deviceName }}</div>
++                                    </div>
++                                </template>
++                                <template #option="slotProps">
++                                    <div class="flex items-center w-full min-w-0 gap-2 justify-between">
++                                        <div class="min-w-0 truncate">
++                                            <span
++                                                class="pi pi-minus mr-2 ml-1"
++                                                :style="{ color: slotProps.option.lineColor }"
++                                            />{{ slotProps.option.tempFrontendName }}
++                                        </div>
++                                        <div class="shrink-0">{{ slotProps.option.temp }} {{ slotProps.option.unit }}</div>
++                                    </div>
++                                </template>
++                            </Listbox>
++                        </section>
++                    </div>
+                 </div>
+                 <div
+                     v-if="
+@@ -771,6 +885,65 @@ onUnmounted(() => {
+ </template>
+ 
+ <style scoped lang="scss">
++.lcd-panorama {
++    display: grid;
++    grid-template-columns: minmax(0, 1fr);
++    max-width: 80rem;
++    gap: 1.5rem;
++
++    #left-side {
++        display: grid;
++        grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
++        gap: 1.5rem;
++        align-items: start;
++
++        > div {
++            width: auto;
++            min-width: 0;
++            margin: 0;
++        }
++
++        :deep([data-pc-name='slider']) {
++            width: calc(100% - 0.75rem) !important;
++        }
++    }
++}
++
++.lcd-panorama-editor {
++    min-width: 0;
++    container-type: inline-size;
++
++    .lcd-sensor-panels {
++        display: grid;
++        grid-template-columns: minmax(0, 1fr);
++        gap: 1.5rem;
++    }
++
++    .lcd-sensor-panel {
++        display: flex;
++        flex-direction: column;
++        min-width: 0;
++        padding: 1rem;
++        border: 1px solid rgb(var(--colors-border-one));
++        border-radius: 0.75rem;
++    }
++
++    .lcd-panel-thresholds {
++        flex: 1;
++    }
++
++    // Fieldsets have an intrinsic minimum width unless explicitly reset.
++    :deep(fieldset) {
++        min-width: 0;
++    }
++}
++
++@container (min-width: 46rem) {
++    .lcd-sensor-panels.lcd-sensor-panels-split {
++        grid-template-columns: repeat(2, minmax(0, 1fr));
++    }
++}
++
+ #lcd-image {
+     border-radius: 50%;
+     border-color: rgb(var(--colors-bg-two));
 diff --git a/coolercontrold/cc-image/examples/metric_previews.rs b/coolercontrold/cc-image/examples/metric_previews.rs
 new file mode 100644
 index 0000000..1689784
