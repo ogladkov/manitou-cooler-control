@@ -73,6 +73,7 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("list", help="Read-only discovery; does not open USB devices")
     commands.add_parser("probe-rgb", help="Query RGB hubs/groups without changing settings (root)")
+    commands.add_parser("probe-aura", help="Query only ASUS Aura ARGB layout (root; no effects)")
     limits = commands.add_parser("export-openai-limits", help="Read Codex quota as the desktop user")
     limits.add_argument("--codex", default="codex")
     limits.add_argument("--output", type=Path, default=DEFAULT_LIMITS_FILE)
@@ -93,9 +94,13 @@ def main():
         print(json.dumps(snapshot, indent=2))
     elif args.command == "list":
         print(json.dumps([screen.as_dict() for screen in discover()], indent=2))
-    elif args.command == "probe-rgb":
+    elif args.command in ("probe-rgb", "probe-aura"):
         lighting = Lighting()
-        lighting.discover()
+        if args.command == "probe-aura":
+            from .rgb_transport import discover_rgb
+            lighting.discover([e for e in discover_rgb() if e.kind == "aura"])
+        else:
+            lighting.discover()
         print(json.dumps({"devices": [
             {"id": d.id, "name": d.name, "channels": d.channels}
             for d in lighting.devices.values()], "errors": lighting.discovery_errors}, indent=2))

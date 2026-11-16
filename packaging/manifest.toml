@@ -1,7 +1,7 @@
 id = "lianli-lcd"
 type = "device"
 description = "Lian Li LCD / RGB, TRYX Panorama LCD, fan RPM and CPU/GPU/RAM/VRAM/disk telemetry"
-version = "0.5.2"
+version = "0.5.3"
 executable = "/opt/cc-lianli-lcd/venv/bin/cc-lianli-lcd"
 args = "serve --socket /run/cc-lianli-lcd/service.sock"
 address = "/run/cc-lianli-lcd/service.sock"

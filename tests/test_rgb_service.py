@@ -11,6 +11,7 @@ from coolercontrol.device_service.v1 import (
     lighting_pb2 as light, list_devices_pb2, reset_channel_pb2, status_pb2,
 )
 from lianli_lcd.controller import Controller
+from lianli_lcd.aura import AuraDevice, Layout
 from lianli_lcd.discovery import simulated_screens
 from lianli_lcd.rgb import Lighting
 from lianli_lcd.rgb_protocol import WirelessGroup
@@ -72,6 +73,29 @@ def test_native_rgb_contract_preserves_seven_lcds_and_fan_control(running):
     with pytest.raises(grpc.RpcError) as error:
         stub.FixedDuty(fixed_duty_pb2.FixedDutyRequest())
     assert error.value.code() == grpc.StatusCode.UNIMPLEMENTED
+
+
+def test_aura_native_lighting_modes_and_reset(running):
+    stub, lighting, _ = running
+    aura = AuraDevice(Endpoint("aura", "sim-aura", 0, 0), Layout("AULA3-AR32-0201", 3, 1))
+    lighting.devices[aura.id] = aura
+    devices = stub.ListDevices(list_devices_pb2.ListDevicesRequest()).devices
+    device = next(d for d in devices if d.id == aura.id)
+    assert set(device.info.channels) == {"argb-1", "argb-2", "argb-3"}
+    assert not device.info.lighting_speeds
+    stub.InitializeDevice(initialize_device_pb2.InitializeDeviceRequest(device_id=aura.id))
+    assert not lighting.last_packets
+    for channel, info in device.info.channels.items():
+        for mode in info.lighting_modes.lighting_mode:
+            assert not mode.speed_enabled and not mode.backward_enabled
+            stub.Lighting(light.LightingRequest(
+                device_id=aura.id, channel_id=channel, setting=light.LightingSetting(
+                    mode=mode.name, colors=[light.RGB(r=120)] * mode.min_colors)))
+            assert len(lighting.last_packets[(aura.id, channel)]) == 2
+        stub.ResetChannel(reset_channel_pb2.ResetChannelRequest(
+            device_id=aura.id, channel_id=channel))
+        assert lighting.last_packets[(aura.id, channel)][0][5] == 0
+    assert not stub.Status(status_pb2.StatusRequest(device_id=aura.id)).status
 
 
 @pytest.mark.parametrize("device,channel,setting,code", [

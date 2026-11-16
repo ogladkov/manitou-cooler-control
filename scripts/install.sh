@@ -40,7 +40,7 @@ done
 install -d -m755 /opt/cc-lianli-lcd /var/lib/coolercontrol/plugins/lianli-lcd
 /usr/bin/python3 -m venv /opt/cc-lianli-lcd/venv
 /opt/cc-lianli-lcd/venv/bin/pip install --no-index --upgrade --force-reinstall \
-    --find-links "$project_dir/artifacts/wheels" coolercontrol-lianli-lcd==0.5.2
+    --find-links "$project_dir/artifacts/wheels" coolercontrol-lianli-lcd==0.5.3
 install -m644 "$project_dir/packaging/manifest.toml" \
     /var/lib/coolercontrol/plugins/lianli-lcd/manifest.toml
 if $compat; then

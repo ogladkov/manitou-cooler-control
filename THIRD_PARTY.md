@@ -20,6 +20,14 @@ This project is distributed under GPL-3.0-or-later (`LICENSE`).
   `src/adb.cpp`, `src/media.cpp`). Copyright (c) 2025 Fadli Arsani;
   MIT notice in `vendor/reed-tpse-LICENSE`. Only the `cm01` display protocol is used.
   Android platform tools (`adb`) and FFmpeg are system dependencies and are not bundled.
+* ASUS motherboard ARGB packet formats and channel mapping in `aura.py` are
+  adapted from **OpenRGB**, commit `e4af57cdfcd25c4a1e1c97185fe9c6cbf2ac79c3`,
+  <https://github.com/CalcProgrammer1/OpenRGB/tree/e4af57cdfcd25c4a1e1c97185fe9c6cbf2ac79c3/Controllers/AsusAuraUSBController/AsusAuraUSBController>.
+  `AsusAuraUSBController.{cpp,h}`, `AsusAuraMainboardController.{cpp,h}` and
+  `AsusAuraUSBControllerDetect.cpp`; copyright Martin Hartl and OpenRGB contributors,
+  GPL-2.0-or-later. License text: `vendor/OpenRGB-LICENSE`.
+  Only firmware/configuration queries and volatile per-header lighting effects
+  are implemented; OpenRGB itself is not required or bundled.
 * `tests/vendor/tinyuz/`: unmodified upstream C decoder and headers from
   <https://github.com/sisong/tinyuz>, commit
   `1d74ffa4d453796df352df470733f45dfa099bb1`.

@@ -8,6 +8,7 @@ import time
 from coolercontrol.models.v1 import device_pb2, status_pb2
 
 from . import __version__
+from .aura import AuraDevice
 from .rgb_protocol import (
     MODES, SPEEDS, WIRELESS_MODES, WirelessGroup, disable_mb_rgb, tl_lighting,
     validate, wireless_upload, tl_packet, tl_rpms,
@@ -83,6 +84,14 @@ class Lighting:
             return
         endpoints = discover_rgb() if endpoints is None else endpoints
         for endpoint in endpoints:
+            if endpoint.kind == "aura":
+                try:
+                    with self.transport.open(endpoint) as hid:
+                        device = AuraDevice(endpoint, hid.layout())
+                    self.devices[device.id] = device
+                except Exception as exc:
+                    self._discovery_error(f"ASUS Aura {endpoint.topology}: {exc}")
+                continue
             if endpoint.kind != "wired":
                 continue
             try:
@@ -119,7 +128,7 @@ class Lighting:
                 for group in owned:
                     if addresses.count((group.channel, group.rx)) == 1:
                         self._add_group(group)
-                if not any(d.group for d in self.devices.values()):
+                if not any(isinstance(d, RgbDevice) and d.group for d in self.devices.values()):
                     self._discovery_error("No stable, bound TL LCD Wireless RGB groups found")
         except Exception as exc:
             self._discovery_error(f"Wireless RGB: {exc}")
@@ -137,6 +146,8 @@ class Lighting:
             group.id, f"Lian Li TL LCD Wireless RGB ({group.mac.hex(':')})", self.tx, group=group)
 
     def apply(self, device, channel, setting):
+        if isinstance(device, AuraDevice):
+            return self._aura(device, channel, setting)
         # Validate before any USB access, even on disconnected hardware.
         validate(setting, wireless=device.group is not None)
         if channel not in device.channels:
@@ -157,6 +168,23 @@ class Lighting:
                         with self.transport.open(device.endpoint) as hid:
                             for packet in packets:
                                 hid.exchange(packet, required=False)
+                device.error = None
+            except Exception as exc:
+                device.error = str(exc)
+                raise
+
+    def _aura(self, device, channel, setting):
+        packets = device.packets(channel, setting)
+        with self.lock:
+            try:
+                if self.simulate:
+                    self.last_packets[(device.id, channel)] = packets
+                else:
+                    with self.transport.open(device.endpoint) as hid:
+                        if hid.layout() != device.layout:
+                            raise OSError("ASUS Aura layout changed; restart the plugin")
+                        for packet in packets:
+                            hid.write(packet)
                 device.error = None
             except Exception as exc:
                 device.error = str(exc)
@@ -209,6 +237,8 @@ class Lighting:
             raise TimeoutError("Wireless fan did not acknowledge the RGB effect")
 
     def status(self, device):
+        if isinstance(device, AuraDevice):
+            return []  # Aura exposes no fan-speed or lighting readback telemetry.
         with self.lock:
             if self.simulate:
                 values = {key: 1200 + i * 100 for i, key in enumerate(device.rpm_channels)}

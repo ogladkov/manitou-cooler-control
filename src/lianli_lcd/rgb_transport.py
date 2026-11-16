@@ -14,7 +14,8 @@ import usb.util
 from .rgb_protocol import rf_usb_packets, tl_packet, wireless_groups
 
 
-RGB_IDS = {"wired": (0x0416, 0x7372), "tx": (0x0416, 0x8040), "rx": (0x0416, 0x8041)}
+RGB_IDS = {"wired": (0x0416, 0x7372), "tx": (0x0416, 0x8040), "rx": (0x0416, 0x8041),
+           "aura": (0x0B05, 0x1AA6)}
 
 
 @dataclass(frozen=True)
@@ -153,12 +154,16 @@ class RgbTransport:
         with ExitStack() as stack:
             lock = stack.enter_context((self.lock_dir / f"rgb-{current.topology}.lock").open("a"))
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            if current.kind == "wired":
+            if current.kind in ("wired", "aura"):
                 if not current.hidraw:
-                    raise OSError("TL controller hidraw node not found")
+                    raise OSError("RGB controller hidraw node not found")
                 fd = os.open(current.hidraw, os.O_RDWR | os.O_NONBLOCK)
                 stack.callback(os.close, fd)
-                yield Hid(fd)
+                if current.kind == "aura":
+                    from .aura import AuraHid
+                    yield AuraHid(fd)
+                else:
+                    yield Hid(fd)
                 return
             vid, pid = RGB_IDS[current.kind]
             dev = usb.core.find(idVendor=vid, idProduct=pid,
