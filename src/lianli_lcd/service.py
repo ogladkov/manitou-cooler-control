@@ -50,7 +50,7 @@ class DeviceService(rpc.DeviceServiceServicer):
             warning = (warning or bool(self.lighting.discovery_errors)
                        or any(d.error for d in self.lighting.devices.values()))
         return health_pb2.HealthResponse(
-            name="Lian Li TL LCD / RGB", version=__version__,
+            name="Manitou LCD / RGB", version=__version__,
             status=health_pb2.HealthResponse.STATUS_WARNING if warning
             else health_pb2.HealthResponse.STATUS_OK,
             uptime_seconds=int(time.monotonic() - self.started),
@@ -61,6 +61,8 @@ class DeviceService(rpc.DeviceServiceServicer):
         for controller in self.controllers.values():
             screen = controller.transport.screen
             model = "Lian Li UNI TL LCD" + (" Wireless" if screen.kind == "wireless" else "")
+            if screen.kind == "tryx":
+                model = "TRYX PANORAMA 360"
             device = device_pb2.Device(id=screen.id, name=f"{model} ({screen.topology})",
                                        uid_info=screen.id)
             device.info.model = model
@@ -69,7 +71,8 @@ class DeviceService(rpc.DeviceServiceServicer):
             device.info.driver_info.locations.append(f"/sys/bus/usb/devices/{screen.topology}")
             channel = device.info.channels["lcd"]
             channel.label = "LCD"
-            channel.lcd_info.screen_width = channel.lcd_info.screen_height = 400
+            channel.lcd_info.screen_width = screen.width
+            channel.lcd_info.screen_height = screen.height
             channel.lcd_info.max_image_size_bytes = 20 * 1024 * 1024
             for name, label, image in [("image", "Image / GIF", True),
                                        ("temp", "Temperature", False),

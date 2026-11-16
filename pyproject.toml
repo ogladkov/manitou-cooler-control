@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "coolercontrol-lianli-lcd"
-version = "0.4.1"
-description = "Native CoolerControl plugin for Lian Li TL LCD screens and RGB lighting"
+version = "0.5.0"
+description = "Native CoolerControl plugin for Lian Li LCD/RGB and TRYX Panorama screens"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
-license-files = ["LICENSE", "vendor/lian-li-linux-LICENSE", "vendor/tinyuz-LICENSE"]
+license-files = ["LICENSE", "vendor/lian-li-linux-LICENSE", "vendor/tinyuz-LICENSE", "vendor/reed-tpse-LICENSE"]
 dependencies = [
   "grpcio==1.78.0",
   "protobuf>=6.31.1,<7",

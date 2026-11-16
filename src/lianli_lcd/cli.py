@@ -13,6 +13,8 @@ import grpc
 from coolercontrol.device_service.v1 import device_service_pb2_grpc
 
 from .controller import Controller
+from .tryx_controller import TryxController
+from .tryx_transport import TryxTransport, SimulatedTryxTransport
 from .discovery import discover, simulated_screens
 from .service import DeviceService
 from .transport import LcdTransport, SimulatedTransport
@@ -28,13 +30,18 @@ def serve(args):
     with socket.with_suffix(".lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         stop = threading.Event()
-        screens = simulated_screens() if args.simulate else discover()
-        controllers = {
-            screen.id: Controller(
-                SimulatedTransport(screen) if args.simulate
-                else LcdTransport(screen, Path("/run/cc-lianli-lcd/devices")), args.image_root,
-            ) for screen in screens
-        }
+        screens = simulated_screens(args.simulate_tryx) if args.simulate else discover()
+        controllers = {}
+        for screen in screens:
+            if screen.kind == "tryx":
+                transport = (SimulatedTryxTransport(screen) if args.simulate
+                             else TryxTransport(screen))
+                controller = TryxController(transport, args.image_root)
+            else:
+                transport = (SimulatedTransport(screen) if args.simulate
+                             else LcdTransport(screen, Path("/run/cc-lianli-lcd/devices")))
+                controller = Controller(transport, args.image_root)
+            controllers[screen.id] = controller
         lighting = Lighting(simulate=args.simulate)
         lighting.discover()
         telemetry = Telemetry(simulate=args.simulate, limits_file=args.limits_file)
@@ -62,7 +69,7 @@ def serve(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Lian Li TL LCD/RGB CoolerControl plugin")
+    parser = argparse.ArgumentParser(description="Manitou Lian Li / TRYX LCD CoolerControl plugin")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("list", help="Read-only discovery; does not open USB devices")
     commands.add_parser("probe-rgb", help="Query RGB hubs/groups without changing settings (root)")
@@ -72,10 +79,14 @@ def main():
     server = commands.add_parser("serve", help="Run CoolerControl gRPC device service")
     server.add_argument("--socket", type=Path, default=Path("/run/cc-lianli-lcd/service.sock"))
     server.add_argument("--simulate", action="store_true", help="Seven simulated screens; no USB I/O")
+    server.add_argument("--simulate-tryx", action="store_true",
+                        help="Add a TRYX Panorama to --simulate (no USB or ADB I/O)")
     server.add_argument("--limits-file", type=Path, default=DEFAULT_LIMITS_FILE)
     server.add_argument("--image-root", type=Path, action="append",
                         default=[Path("/etc/coolercontrol"), Path("/var/lib/coolercontrol")])
     args = parser.parse_args()
+    if args.command == "serve" and args.simulate_tryx and not args.simulate:
+        parser.error("--simulate-tryx requires --simulate")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     if args.command == "export-openai-limits":
         snapshot = export_limits(args.output, args.codex)

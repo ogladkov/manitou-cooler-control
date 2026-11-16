@@ -14,6 +14,12 @@ This project is distributed under GPL-3.0-or-later (`LICENSE`).
   RGB formats additionally use `tl_fan/controller.rs` and
   `wireless/{controller,discovery,rgb,transport,mb_sync,fan_type}.rs` at the
   same pinned commit. Only lighting and state-query commands are implemented.
+* TRYX Android/CDC framing and display commands are adapted from **reed-tpse**,
+  commit `69c73974988c30dd0d9b9464dc9ebd051b8875c5`,
+  <https://github.com/fadli0029/reed-tpse> (`src/protocol.cpp`, `src/device.cpp`,
+  `src/adb.cpp`, `src/media.cpp`). Copyright (c) 2025 Fadli Arsani;
+  MIT notice in `vendor/reed-tpse-LICENSE`. Only the `cm01` display protocol is used.
+  Android platform tools (`adb`) and FFmpeg are system dependencies and are not bundled.
 * `tests/vendor/tinyuz/`: unmodified upstream C decoder and headers from
   <https://github.com/sisong/tinyuz>, commit
   `1d74ffa4d453796df352df470733f45dfa099bb1`.

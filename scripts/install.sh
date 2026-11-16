@@ -26,10 +26,21 @@ fi
 [[ -d "$project_dir/artifacts/wheels" ]] || {
     echo 'Prepare wheels first: .venv/bin/pip wheel . -w artifacts/wheels' >&2; exit 1;
 }
+# Check before changing the installed plugin when this TRYX revision is present.
+for product_file in /sys/bus/usb/devices/*/product; do
+    if [[ -r "$product_file" && $(< "$product_file") == cm01_se ]]; then
+        for dependency in adb ffmpeg; do
+            command -v "$dependency" >/dev/null || {
+                echo 'TRYX requires: sudo apt install adb ffmpeg' >&2; exit 1;
+            }
+        done
+        break
+    fi
+done
 install -d -m755 /opt/cc-lianli-lcd /var/lib/coolercontrol/plugins/lianli-lcd
 /usr/bin/python3 -m venv /opt/cc-lianli-lcd/venv
 /opt/cc-lianli-lcd/venv/bin/pip install --no-index --upgrade --force-reinstall \
-    --find-links "$project_dir/artifacts/wheels" coolercontrol-lianli-lcd==0.4.1
+    --find-links "$project_dir/artifacts/wheels" coolercontrol-lianli-lcd==0.5.0
 install -m644 "$project_dir/packaging/manifest.toml" \
     /var/lib/coolercontrol/plugins/lianli-lcd/manifest.toml
 if $compat; then
