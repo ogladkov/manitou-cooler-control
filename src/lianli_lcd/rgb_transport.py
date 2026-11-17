@@ -11,7 +11,9 @@ import time
 import usb.core
 import usb.util
 
-from .rgb_protocol import rf_usb_packets, tl_packet, wireless_groups
+from .rgb_protocol import (
+    rf_usb_packets, tl_packet, wireless_groups, wireless_records, wireless_rpm_records,
+)
 
 
 RGB_IDS = {"wired": (0x0416, 0x7372), "tx": (0x0416, 0x8040), "rx": (0x0416, 0x8041),
@@ -102,14 +104,20 @@ class Bulk:
             reply.extend(chunk)
         return bytes(reply)
 
-    def groups(self):
+    def _group_reply(self):
         reply = self.query(b"\x10\x01" + bytes(62), 512)
-        groups = wireless_groups(reply)
+        wireless_records(reply)  # Validate framing before inspecting the page count.
+        pages = 1
         if reply[1] > 10:
             pages = (reply[1] + 9) // 10
             reply = self.query(bytes((0x10, pages)) + bytes(62), pages * 512)
-            groups = wireless_groups(reply, pages)
-        return groups
+        return reply, pages
+
+    def groups(self):
+        return wireless_groups(*self._group_reply())
+
+    def rpm_records(self):
+        return wireless_rpm_records(*self._group_reply())
 
     def master(self, channels):
         for channel in dict.fromkeys([*channels, 8]):

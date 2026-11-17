@@ -88,26 +88,58 @@ class WirelessGroup:
     sequence: int
     index: int
     rpms: tuple[int, ...] = ()
+    fan_types: tuple[int, ...] = ()
 
     @property
     def id(self):
         return f"tl-rgb-wireless-{self.mac.hex()}"
 
 
-def wireless_groups(reply, pages=1):
+def wireless_records(reply, pages=1):
     if len(reply) < 4 or reply[0] != 0x10:
         raise OSError("Invalid Wireless GetDev response")
     count = min(reply[1], pages * 10)
     if len(reply) < 4 + count * 42:
         raise OSError("Truncated Wireless GetDev response")
+    return [reply[4 + i * 42:46 + i * 42] for i in range(count)]
+
+
+def _tl_record(r):
+    return (r[41] == 0x1C and r[18] == 0 and 1 <= r[19] <= 4
+            and any(r[:6]) and any(r[6:12])
+            and all(t in (27, 32, 33, 34, 35) for t in r[24:24 + r[19]]))
+
+
+def _record_rpms(r):
+    return tuple(((r[28 + n * 2] & 15) << 8) | r[29 + n * 2] for n in range(r[19]))
+
+
+@dataclass(frozen=True)
+class WirelessRpm:
+    master: bytes
+    fan_types: tuple[int, ...]
+    rpms: tuple[int, ...]
+
+
+def wireless_rpm_records(reply, pages=1):
+    """MAC-addressed sensor readings, never RF command destinations.
+
+    RF channel/slot changes and collisions don't make a fresh MAC-addressed
+    reading ambiguous. Duplicate MACs, malformed records and unknown fan
+    layouts still do. The caller must check the expected owner and layout.
+    """
+    records = wireless_records(reply, pages)
+    return {bytes(r[:6]): WirelessRpm(bytes(r[6:12]), tuple(r[24:24 + r[19]]), _record_rpms(r))
+            for r in records if _tl_record(r)
+            and sum(other[:6] == r[:6] for other in records) == 1}
+
+
+def wireless_groups(reply, pages=1):
     groups = []
-    records = [reply[4 + i * 42:46 + i * 42] for i in range(count)]
+    records = wireless_records(reply, pages)
     for i, r in enumerate(records):
         # Only homogeneous TL LCD Wireless groups. Do not guess another fan's layout.
-        if (r[41] != 0x1C or r[18] != 0 or not 1 <= r[19] <= 4
-                or not any(r[:6]) or not any(r[6:12])
-                or not 1 <= r[12] <= 39 or not 1 <= r[13] <= 13
-                or any(t not in (27, 32, 33, 34, 35) for t in r[24:24 + r[19]])):
+        if (not _tl_record(r) or not 1 <= r[12] <= 39 or not 1 <= r[13] <= 13):
             continue
         # Include other fan models in collision detection and MB-sync slot numbering.
         if sum(other[41] == 0x1C and other[18] != 255 and other[12:14] == r[12:14]
@@ -117,8 +149,7 @@ def wireless_groups(reply, pages=1):
                    for other in records[:i])
         groups.append(WirelessGroup(bytes(r[:6]), bytes(r[6:12]), r[12], r[13], r[19],
                                     bytes(r[20:24]), bool(r[28] & 0x40), r[40], slot,
-                                    tuple(((r[28 + n * 2] & 15) << 8) | r[29 + n * 2]
-                                          for n in range(r[19]))))
+                                    _record_rpms(r), tuple(r[24:24 + r[19]])))
     return groups
 
 

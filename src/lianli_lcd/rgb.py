@@ -5,6 +5,8 @@ import logging
 import threading
 import time
 
+import usb.core
+
 from coolercontrol.models.v1 import device_pb2, status_pb2
 
 from . import __version__
@@ -247,13 +249,32 @@ class Lighting:
                 values = {key: 1200 + i * 100 for i, key in enumerate(device.rpm_channels)}
             elif device.group:
                 # RX-only query. It neither transmits RF nor changes PWM/binding.
-                with self.transport.open(self.rx) as receiver:
-                    group = next((g for g in receiver.groups() if g.mac == device.group.mac), None)
-                    if group is None or self._identity(group) != self._identity(device.group):
-                        raise OSError("Wireless RPM source disconnected or changed")
-                    values = {f"fan-{i + 1}": rpm for i, rpm in enumerate(group.rpms)}
+                values = self._wireless_rpms(device)
             else:
                 with self.transport.open(device.endpoint) as hid:
                     values = tl_rpms(hid.exchange(tl_packet(0xA1)))
             return [status_pb2.Status(id=key, speed=status_pb2.Status.FanSpeed(rpm=rpm))
                     for key, rpm in values.items() if key in device.rpm_channels]
+
+    def _wireless_rpms(self, device):
+        expected = device.group
+        # Three bounded, fresh reads. Never return cached RPM or rebind a group
+        # to hide a real disconnection. USB open/permission errors fail directly.
+        with self.transport.open(self.rx) as receiver:
+            for attempt in range(3):
+                try:
+                    records = receiver.rpm_records()
+                    record = records.get(expected.mac)
+                    if record is None:
+                        raise OSError("MAC missing, invalid record or duplicate MAC in RX reply")
+                    if record.master != expected.master:
+                        raise OSError("group owner changed")
+                    if (len(record.rpms) != expected.fans
+                            or (expected.fan_types and record.fan_types != expected.fan_types)):
+                        raise OSError("fan layout changed")
+                    return {f"fan-{i + 1}": rpm for i, rpm in enumerate(record.rpms)}
+                except (OSError, usb.core.USBError) as exc:
+                    if attempt == 2:
+                        raise OSError(f"Wireless RPM {expected.mac.hex(':')}: {exc} "
+                                      "(3 fresh reads failed)") from exc
+                    time.sleep(.025)

@@ -14,7 +14,7 @@ from lianli_lcd.controller import Controller
 from lianli_lcd.aura import AuraDevice, Layout
 from lianli_lcd.discovery import simulated_screens
 from lianli_lcd.rgb import Lighting
-from lianli_lcd.rgb_protocol import WirelessGroup
+from lianli_lcd.rgb_protocol import WirelessGroup, WirelessRpm
 from lianli_lcd.rgb_transport import Endpoint
 from lianli_lcd.service import DeviceService
 from lianli_lcd.transport import SimulatedTransport
@@ -199,3 +199,30 @@ def test_startup_discovery_failure_keeps_service_available():
     lighting.discover([Endpoint("tx", "fake-tx", 0, 0), Endpoint("rx", "fake-rx", 0, 0)])
     assert not lighting.devices
     assert "no USB access" in lighting.discovery_errors[0]
+
+
+def test_wireless_rpm_grpc_failure_and_recovery_keep_lcd_available(running, monkeypatch):
+    stub, lighting, _ = running
+    device = next(d for d in lighting.devices.values() if d.group)
+    group = device.group
+    good = {group.mac: WirelessRpm(group.master, (32,) * group.fans,
+                                  (1200,) * group.fans)}
+    replies = iter([good, {}, {}, {}, good])
+    class Receiver:
+        @contextmanager
+        def open(self, endpoint):
+            assert endpoint.kind == "rx"
+            yield self
+        def rpm_records(self):
+            return next(replies)
+    lighting.simulate = False
+    lighting.transport = Receiver()
+    monkeypatch.setattr("lianli_lcd.rgb.time.sleep", lambda _: None)
+    request = status_pb2.StatusRequest(device_id=device.id)
+    assert len(stub.Status(request).status) == group.fans
+    with pytest.raises(grpc.RpcError) as error:
+        stub.Status(request)
+    assert error.value.code() == grpc.StatusCode.UNAVAILABLE
+    assert "3 fresh reads failed" in error.value.details()
+    stub.Status(status_pb2.StatusRequest(device_id="sim-1"))
+    assert len(stub.Status(request).status) == group.fans

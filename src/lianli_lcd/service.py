@@ -41,7 +41,7 @@ class DeviceService(rpc.DeviceServiceServicer):
         except PermissionError as exc:
             context.abort(grpc.StatusCode.PERMISSION_DENIED, str(exc))
         except Exception as exc:
-            logging.exception("LCD operation failed")
+            logging.exception("Device operation failed")
             context.abort(grpc.StatusCode.UNAVAILABLE, str(exc))
 
     def Health(self, request, context):
